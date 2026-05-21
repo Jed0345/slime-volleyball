@@ -675,20 +675,10 @@
   }
 
   // ===================== NETWORKING =====================
-  // Auto-detect: on localhost connect to the local relay; otherwise use the
-  // deployed server. When you deploy, replace the production URL below.
-  var SERVER_URL;
-  (function(){
-    var host = location.hostname;
-    if(host === 'localhost' || host === '127.0.0.1'){
-      // Same machine, same port that served this page.
-      var proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
-      SERVER_URL = proto + location.host;
-    } else {
-      // CHANGE THIS to your deployed server (Render), using wss://
-      SERVER_URL = 'wss://YOUR-APP-NAME.onrender.com';
-    }
-  })();
+  // The WebSocket relay lives on the same origin that served this page,
+  // so we always derive it from location.host. Works on localhost, Render,
+  // custom domains, preview environments — everywhere — with no manual edit.
+  var SERVER_URL = ((location.protocol === 'https:') ? 'wss://' : 'ws://') + location.host;
 
   var ws = null;
   var lastSentInput = '';
