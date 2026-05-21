@@ -1,0 +1,131 @@
+// Slime Volleyball - WebSocket relay + static file server.
+//
+// Locally this serves BOTH the game (from /public) AND the WebSocket relay,
+// so you only run one command and open one URL. In production on Render it
+// works the same way (it'll happily serve the game too), though you can also
+// host the game separately on Vercel/GitHub Pages if you prefer.
+//
+// The relay is "dumb": it pairs two players by a 4-letter code and forwards
+// messages between them. The HOST browser runs the physics; the GUEST browser
+// sends inputs and renders what it receives.
+
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const { WebSocketServer } = require("ws");
+
+const PORT = process.env.PORT || 8080;
+const PUBLIC_DIR = path.join(__dirname, "public");
+
+// roomCode -> { host: ws|null, guest: ws|null }
+const rooms = new Map();
+
+const MIME = {
+  ".html": "text/html",
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".png": "image/png",
+  ".json": "application/json",
+  ".ico": "image/x-icon",
+};
+
+// --- Static file server (serves the game from /public) ---
+const server = http.createServer((req, res) => {
+  let urlPath = decodeURIComponent(req.url.split("?")[0]);
+  if (urlPath === "/") urlPath = "/index.html";
+
+  const filePath = path.join(PUBLIC_DIR, path.normalize(urlPath));
+  // Prevent path traversal outside /public
+  if (!filePath.startsWith(PUBLIC_DIR)) {
+    res.writeHead(403);
+    res.end("Forbidden");
+    return;
+  }
+
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Not found");
+      return;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    res.end(data);
+  });
+});
+
+// --- WebSocket relay ---
+const wss = new WebSocketServer({ server });
+
+function send(ws, obj) {
+  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
+}
+function otherPeer(room, ws) {
+  if (!room) return null;
+  return room.host === ws ? room.guest : room.host;
+}
+
+wss.on("connection", (ws) => {
+  ws.roomCode = null;
+  ws.role = null;
+
+  ws.on("message", (data) => {
+    let msg;
+    try {
+      msg = JSON.parse(data.toString());
+    } catch (e) {
+      return;
+    }
+
+    if (msg.type === "create") {
+      const code = msg.code;
+      const existing = rooms.get(code);
+      if (existing && (existing.host || existing.guest)) {
+        send(ws, { type: "error", reason: "Room code already in use." });
+        return;
+      }
+      rooms.set(code, { host: ws, guest: null });
+      ws.roomCode = code;
+      ws.role = "host";
+      send(ws, { type: "created", code });
+      return;
+    }
+
+    if (msg.type === "join") {
+      const code = msg.code;
+      const room = rooms.get(code);
+      if (!room || !room.host) {
+        send(ws, { type: "error", reason: "No game found with that code." });
+        return;
+      }
+      if (room.guest) {
+        send(ws, { type: "error", reason: "That game is already full." });
+        return;
+      }
+      room.guest = ws;
+      ws.roomCode = code;
+      ws.role = "guest";
+      send(ws, { type: "joined", code });
+      send(room.host, { type: "peer-joined" });
+      send(room.guest, { type: "start" });
+      return;
+    }
+
+    // In-game relay: forward everything else to the other peer.
+    const room = rooms.get(ws.roomCode);
+    const peer = otherPeer(room, ws);
+    if (peer) send(peer, msg);
+  });
+
+  ws.on("close", () => {
+    const room = rooms.get(ws.roomCode);
+    if (!room) return;
+    send(otherPeer(room, ws), { type: "peer-left" });
+    rooms.delete(ws.roomCode);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log("Slime Volleyball running at http://localhost:" + PORT);
+  console.log("Open that URL in two browser tabs/windows to test multiplayer.");
+});
