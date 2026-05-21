@@ -40,8 +40,8 @@
     font-family:'PixelBold', monospace;
     box-shadow:0 3px 0 #20242e;
   }
-  #sv-board .side{ display:flex; flex-direction:row; align-items:center; gap:14px; }
-  #sv-board .side.left{ justify-content:flex-end; }
+  #sv-board .side{ display:flex; flex-direction:row; align-items:center; gap:14px; flex-wrap:wrap; }
+  #sv-board .side.left{ justify-content:flex-end; flex-wrap:wrap-reverse; }
   #sv-board .side.right{ justify-content:flex-start; }
   #sv-board .namescore{ display:flex; flex-direction:row; align-items:center; gap:10px; }
   #sv-board .vs{ font-size:12px; color:#cfd6e4; padding:0 12px; white-space:nowrap;
@@ -102,6 +102,16 @@
     -webkit-text-stroke:2px #18223a;
     paint-order:stroke fill;
   }
+  @media (max-width: 768px){
+    #msgtext{
+      font-size:32px; line-height:1.6rem; letter-spacing:1px;
+      -webkit-text-stroke-width:3px;
+    }
+    #msgsub{
+      font-size:10px; line-height:1.6;
+      -webkit-text-stroke-width:1.5px;
+    }
+  }
 
   #controls{
     display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -117,8 +127,36 @@
   button:hover{ background:#262c3b; }
   button:active{ transform:scale(0.97); }
 
-  #touchpad{ display:none; gap:8px; width:100%; max-width:750px; }
-  #touchpad button{ flex:1; padding:14px 0; font-size:20px; }
+  #touchpad{ display:none; width:100%; max-width:750px; }
+  #touchpad.show{ display:flex; }
+  #touchpad-arrows{ display:none; gap:8px; width:100%; }
+  #touchpad-arrows button{ flex:1; padding:14px 0; font-size:20px; }
+  #touchpad-joystick{
+    display:none; width:100%; align-items:center; justify-content:space-between;
+    gap:12px; user-select:none; -webkit-user-select:none;
+  }
+  #touchpad.layout-arrows #touchpad-arrows{ display:flex; }
+  #touchpad.layout-joystick #touchpad-joystick{ display:flex; }
+  #joystick-base{
+    position:relative; width:130px; height:130px; border-radius:50%;
+    background:rgba(0,0,0,0.25); border:2px solid #3a4150;
+    touch-action:none; flex-shrink:0;
+  }
+  #joystick-knob{
+    position:absolute; left:50%; top:50%;
+    width:58px; height:58px; border-radius:50%;
+    background:rgba(255,255,255,0.55); border:2px solid #e8ecf4;
+    transform:translate(-50%, -50%); pointer-events:none;
+    transition:background .1s;
+  }
+  #joystick-base.active #joystick-knob{ background:rgba(255,255,255,0.75); }
+  #joystick-jump{
+    width:120px; height:120px; border-radius:50%;
+    font-size:18px; font-weight:bold; letter-spacing:1px;
+    background:rgba(232,83,127,0.25); border:2px solid #e8537f;
+    color:#fff; flex-shrink:0;
+  }
+  #joystick-jump:active{ background:rgba(232,83,127,0.5); }
 
   #chat{
     position:relative;
@@ -186,6 +224,27 @@
   #stage:not([data-filter="off"]) #pixi-canvas{ display:block; }
   #stage:not([data-filter="off"]) #game{ visibility:hidden; }
 
+  #skinpickers{
+    display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
+    width:100%; max-width:750px;
+  }
+  .skin-picker{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .skin-label{
+    font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
+    color:#fff; text-shadow:1px 1px 0 rgba(0,0,0,0.45);
+  }
+  .skin-label.blue{ color:#bfe0ff; }
+  .skin-label.pink{ color:#ffc8dd; }
+  .swatches{ display:flex; gap:5px; flex-wrap:wrap; }
+  .swatch{
+    width:20px; height:20px; padding:0;
+    border-radius:50%; border:2px solid #3a4150;
+    cursor:pointer; background:transparent;
+    transition:transform .1s, border-color .15s;
+  }
+  .swatch:hover{ border-color:#9aa3b8; }
+  .swatch.selected{ border-color:#fff; transform:scale(1.18); }
+
   /* --- Film-grain noise overlay (always on, sits above filter) --- */
   #noise-overlay{
     position:absolute; inset:0; pointer-events:none;
@@ -202,7 +261,7 @@
     <span class="side left">
       <span class="dotrow left" id="dots-p1"></span>
       <div class="namescore">
-        <span class="lbl blue">BLUE SLIME</span>
+        <span class="lbl blue" id="p1name">BLUE SLIME</span>
         <span class="numbox blue" id="p1score">00</span>
       </div>
     </span>
@@ -234,7 +293,19 @@
       <button id="modebtn">Mode: 1 Player</button>
       <button id="oppbtn">Opponent: White Slime</button>
       <button id="filterbtn">Filter: Off</button>
+      <button id="touchctrlbtn" style="display:none;">Touch: Arrows</button>
       <button id="resetbtn">Reset</button>
+    </div>
+  </div>
+
+  <div id="skinpickers">
+    <div class="skin-picker" id="skin-p1">
+      <span class="skin-label blue">BLUE SKIN</span>
+      <div class="swatches" data-side="p1"></div>
+    </div>
+    <div class="skin-picker" id="skin-p2" style="display:none;">
+      <span class="skin-label pink">PINK SKIN</span>
+      <div class="swatches" data-side="p2"></div>
     </div>
   </div>
 
@@ -268,10 +339,18 @@
     <div id="chat-emoji-picker" aria-hidden="true"></div>
   </div>
 
-  <div id="touchpad">
-    <button id="tleft" aria-label="Move left">&#8592;</button>
-    <button id="tjump" aria-label="Jump">&#8593;</button>
-    <button id="tright" aria-label="Move right">&#8594;</button>
+  <div id="touchpad" class="layout-arrows">
+    <div id="touchpad-arrows">
+      <button id="tleft" aria-label="Move left">&#8592;</button>
+      <button id="tjump" aria-label="Jump">&#8593;</button>
+      <button id="tright" aria-label="Move right">&#8594;</button>
+    </div>
+    <div id="touchpad-joystick">
+      <div id="joystick-base" aria-label="Joystick">
+        <div id="joystick-knob"></div>
+      </div>
+      <button id="joystick-jump" aria-label="Jump">JUMP</button>
+    </div>
   </div>
 
 <script>
@@ -322,6 +401,40 @@
   var BLUE = '#2f7fd6', BLUE_D = '#1c3f6e';
   var PINK = '#e8537f', PINK_D = '#7a1f3a';
 
+  // User-selectable slime skins. Order is the swatch order in the UI.
+  var SKINS = [
+    '#2f7fd6', // blue (default p1)
+    '#e8537f', // pink (default p2)
+    '#5dd663', // green
+    '#f4b73e', // yellow
+    '#ff8c2a', // orange
+    '#d83a3a', // red
+    '#c040d0', // purple
+    '#22c0c0', // teal
+    '#f3f3f3', // white
+    '#222222'  // black
+  ];
+  var slimeSkins = { p1: BLUE, p2: PINK };
+  function skinDark(hex){ return darken(hex, 0.45); }
+
+  // In online play, each side's scoreboard label shows the player's chosen
+  // chat username. The remote name is whatever the peer last broadcast.
+  var peerName = '';
+  function updateScoreboardNames(){
+    if(!netMode) return; // offline: updateLabels() handles defaults
+    var localName = (typeof chatUsername === 'string' && chatUsername) ? chatUsername : 'PLAYER';
+    var remoteName = peerName || 'OPPONENT';
+    var p1lbl = document.getElementById('p1name');
+    var p2lbl = document.getElementById('p2name');
+    if(netMode === 'host'){
+      p1lbl.textContent = localName.toUpperCase();
+      p2lbl.textContent = remoteName.toUpperCase();
+    } else {
+      p1lbl.textContent = remoteName.toUpperCase();
+      p2lbl.textContent = localName.toUpperCase();
+    }
+  }
+
   function newSlime(left, opp){
     var r = SLIME_R * (left ? 1 : (opp?opp.rmul:1));
     return {x:0, y:GROUND, vx:0, vy:0, r:r, left:left,
@@ -342,12 +455,23 @@
     p1 = newSlime(true, null);
     p2 = newSlime(false, twoPlayer?null:opp);
     if(twoPlayer){ p2.col=PINK; p2.cold=PINK_D; p2.r=SLIME_R; }
+    applyLocalSkins();
     scores = {p1:0, p2:0};
     server = 'p1';
     state = 'menu';
     resetPositions(server);
     updateScore();
     updateLabels();
+    if(typeof updateSkinPickerVisibility === 'function') updateSkinPickerVisibility();
+  }
+
+  // Apply the user-selected skin to the slime objects. In 1P, p2's color is
+  // owned by the AI opponent, so we don't override it.
+  function applyLocalSkins(){
+    if(p1){ p1.col = slimeSkins.p1; p1.cold = skinDark(slimeSkins.p1); }
+    if(p2 && (twoPlayer || netMode)){
+      p2.col = slimeSkins.p2; p2.cold = skinDark(slimeSkins.p2);
+    }
   }
 
   var WIN = 6;
@@ -373,7 +497,8 @@
     updateDots();
   }
   function updateLabels(){
-    document.getElementById('p2name').textContent = twoPlayer ? 'PINK' : curOpp().name.toUpperCase();
+    document.getElementById('p1name').textContent = 'BLUE SLIME';
+    document.getElementById('p2name').textContent = twoPlayer ? 'PINK SLIME' : curOpp().name.toUpperCase();
     document.getElementById('oppbtn').style.display = twoPlayer ? 'none' : '';
     document.getElementById('oppbtn').textContent = 'Opponent: ' + curOpp().name;
     document.getElementById('modebtn').textContent = 'Mode: ' + (twoPlayer ? '2 Player' : '1 Player');
@@ -754,6 +879,7 @@
     p1 = newSlime(true, null);
     p2 = newSlime(false, null);
     p2.col = PINK; p2.cold = PINK_D; p2.r = SLIME_R;
+    applyLocalSkins();
     scores = {p1:0, p2:0};
     server = 1;
     resetPositions(server);
@@ -765,6 +891,13 @@
       asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
              : 'You are <b>PINK</b> &middot; Move/jump: <b>A / W / D</b> or arrows';
     document.getElementById('lobby').style.display = 'none';
+    updateSkinPickerVisibility();
+    // Tell the peer which color and username we picked for our slime.
+    var mySide = asHost ? 'p1' : 'p2';
+    netSend({type:'skin', side: mySide, col: slimeSkins[mySide]});
+    netSend({type:'name', name: chatUsername});
+    peerName = '';
+    updateScoreboardNames();
     if(asHost){
       // Host begins on the menu; pressing space/tap serves (handled by startPoint).
       state = 'point';
@@ -794,6 +927,20 @@
       return;
     }
     if(m.type === 'chat'){ chatOnPeerMessage(m); return; }
+
+    if(m.type === 'skin' && (m.side === 'p1' || m.side === 'p2') && typeof m.col === 'string'){
+      // Remote peer picked a skin — apply to the slime they control.
+      slimeSkins[m.side] = m.col;
+      var slime = (m.side === 'p1') ? p1 : p2;
+      if(slime){ slime.col = m.col; slime.cold = skinDark(m.col); }
+      return;
+    }
+
+    if(m.type === 'name' && typeof m.name === 'string'){
+      peerName = m.name.slice(0, 16);
+      updateScoreboardNames();
+      return;
+    }
 
     if(netMode === 'host' && m.type === 'input'){
       netInput.left = !!m.left; netInput.right = !!m.right; netInput.jump = !!m.jump;
@@ -887,7 +1034,11 @@
   cv.addEventListener('click', function(){ tryServe(); });
 
   function isTouch(){ return ('ontouchstart' in window) || navigator.maxTouchPoints>0; }
-  if(isTouch()){ document.getElementById('touchpad').style.display='flex'; }
+  var touchpadEl = document.getElementById('touchpad');
+  if(isTouch()){
+    touchpadEl.classList.add('show');
+    document.getElementById('touchctrlbtn').style.display = '';
+  }
   function bindHold(id, key){
     var el = document.getElementById(id);
     function on(e){ e.preventDefault(); keys[key]=true; tryServe(); }
@@ -899,6 +1050,102 @@
     el.addEventListener('mouseleave', off);
   }
   bindHold('tleft','a'); bindHold('tright','d'); bindHold('tjump','w');
+  bindHold('joystick-jump','w');
+
+  // Virtual joystick: drag the knob, push past a deadzone left/right to engage
+  // the corresponding movement key. Vertical axis is ignored (jump uses the
+  // dedicated button so a jump can be tapped while the slime is mid-move).
+  (function setupJoystick(){
+    var base = document.getElementById('joystick-base');
+    var knob = document.getElementById('joystick-knob');
+    var activeTouchId = null;
+    var usingMouse = false;
+    function applyOffset(x, y){
+      var r = base.offsetWidth / 2;
+      var maxR = r - 14;
+      var d = Math.hypot(x, y);
+      if(d > maxR){ x = x * maxR / d; y = y * maxR / d; }
+      knob.style.transform = 'translate(calc(-50% + ' + x + 'px), calc(-50% + ' + y + 'px))';
+      var dead = r * 0.22;
+      keys['a'] = x < -dead;
+      keys['d'] = x > dead;
+    }
+    function release(){
+      knob.style.transform = '';
+      keys['a'] = false; keys['d'] = false;
+      base.classList.remove('active');
+      activeTouchId = null;
+      usingMouse = false;
+    }
+    function pointFromEvent(clientX, clientY){
+      var rect = base.getBoundingClientRect();
+      return { x: clientX - rect.left - rect.width/2, y: clientY - rect.top - rect.height/2 };
+    }
+    base.addEventListener('touchstart', function(e){
+      e.preventDefault();
+      if(activeTouchId !== null) return;
+      var t = e.changedTouches[0];
+      activeTouchId = t.identifier;
+      base.classList.add('active');
+      var p = pointFromEvent(t.clientX, t.clientY);
+      applyOffset(p.x, p.y);
+    }, {passive:false});
+    base.addEventListener('touchmove', function(e){
+      if(activeTouchId === null) return;
+      for(var i=0; i<e.changedTouches.length; i++){
+        var t = e.changedTouches[i];
+        if(t.identifier === activeTouchId){
+          e.preventDefault();
+          var p = pointFromEvent(t.clientX, t.clientY);
+          applyOffset(p.x, p.y);
+          break;
+        }
+      }
+    }, {passive:false});
+    function onTouchEnd(e){
+      if(activeTouchId === null) return;
+      for(var i=0; i<e.changedTouches.length; i++){
+        if(e.changedTouches[i].identifier === activeTouchId){
+          e.preventDefault();
+          release();
+          break;
+        }
+      }
+    }
+    base.addEventListener('touchend', onTouchEnd, {passive:false});
+    base.addEventListener('touchcancel', onTouchEnd, {passive:false});
+    // Mouse fallback so the joystick is usable on a desktop browser with devtools.
+    base.addEventListener('mousedown', function(e){
+      e.preventDefault(); usingMouse = true; base.classList.add('active');
+      var p = pointFromEvent(e.clientX, e.clientY); applyOffset(p.x, p.y);
+    });
+    window.addEventListener('mousemove', function(e){
+      if(!usingMouse) return;
+      var p = pointFromEvent(e.clientX, e.clientY); applyOffset(p.x, p.y);
+    });
+    window.addEventListener('mouseup', function(){ if(usingMouse) release(); });
+  })();
+
+  // Touch control toggle: switch between arrow buttons and joystick + jump.
+  var touchCtrl = 'arrows';
+  try{
+    var storedCtrl = localStorage.getItem('slimeTouchCtrl');
+    if(storedCtrl === 'joystick' || storedCtrl === 'arrows') touchCtrl = storedCtrl;
+  }catch(e){}
+  function applyTouchCtrl(){
+    touchpadEl.classList.toggle('layout-arrows', touchCtrl === 'arrows');
+    touchpadEl.classList.toggle('layout-joystick', touchCtrl === 'joystick');
+    document.getElementById('touchctrlbtn').textContent =
+      'Touch: ' + (touchCtrl === 'joystick' ? 'Joystick' : 'Arrows');
+    // Reset any held keys when switching, so a stuck press doesn't carry over.
+    keys['a'] = false; keys['d'] = false; keys['w'] = false;
+  }
+  applyTouchCtrl();
+  document.getElementById('touchctrlbtn').addEventListener('click', function(){
+    touchCtrl = (touchCtrl === 'arrows') ? 'joystick' : 'arrows';
+    try{ localStorage.setItem('slimeTouchCtrl', touchCtrl); }catch(e){}
+    applyTouchCtrl();
+  });
 
   document.getElementById('resetbtn').addEventListener('click', function(){
     if(netMode){ location.reload(); return; }   // simplest reliable reset for online
@@ -1291,6 +1538,10 @@
     chatRenderUsername();
     chatAppendSystem('Username set to ' + chatUsername);
     chatNameInput.value = '';
+    if(netMode){
+      netSend({type:'name', name: chatUsername});
+      updateScoreboardNames();
+    }
   }
   chatNameSave.addEventListener('click', chatSaveUsername);
   chatNameInput.addEventListener('keydown', function(e){
@@ -1358,8 +1609,64 @@
   }
   // =================== END CHAT ===================
 
+  // ===================== SKIN PICKER =====================
+  function selectSkin(side, col){
+    slimeSkins[side] = col;
+    var slime = (side === 'p1') ? p1 : p2;
+    // In 1P mode p2's color belongs to the AI opponent — don't override.
+    if(slime && (side === 'p1' || twoPlayer || netMode)){
+      slime.col = col; slime.cold = skinDark(col);
+    }
+    var container = document.querySelector('.swatches[data-side="' + side + '"]');
+    if(container){
+      var swatches = container.querySelectorAll('.swatch');
+      for(var i=0;i<swatches.length;i++){
+        swatches[i].classList.toggle('selected', swatches[i].dataset.col === col);
+      }
+    }
+    if(netMode){ netSend({type:'skin', side:side, col:col}); }
+  }
+  function buildSwatches(){
+    ['p1','p2'].forEach(function(side){
+      var container = document.querySelector('.swatches[data-side="' + side + '"]');
+      if(!container) return;
+      container.innerHTML = '';
+      SKINS.forEach(function(col){
+        var btn = document.createElement('button');
+        btn.className = 'swatch' + (col === slimeSkins[side] ? ' selected' : '');
+        btn.style.background = col;
+        btn.dataset.col = col;
+        btn.title = col;
+        btn.addEventListener('click', function(){ selectSkin(side, col); });
+        container.appendChild(btn);
+      });
+    });
+  }
+  function updateSkinPickerVisibility(){
+    var p1Picker = document.getElementById('skin-p1');
+    var p2Picker = document.getElementById('skin-p2');
+    if(!p1Picker || !p2Picker) return;
+    if(netMode === 'host'){
+      p1Picker.style.display = '';
+      p2Picker.style.display = 'none';
+    } else if(netMode === 'guest'){
+      p1Picker.style.display = 'none';
+      p2Picker.style.display = '';
+    } else if(twoPlayer){
+      p1Picker.style.display = '';
+      p2Picker.style.display = '';
+    } else {
+      // 1 Player: only blue (the user). AI opponent's color comes from OPPS.
+      p1Picker.style.display = '';
+      p2Picker.style.display = 'none';
+    }
+  }
+  // =================== END SKIN PICKER ===================
+
+  buildSwatches();
   buildDots();
   init();
+  updateSkinPickerVisibility();
   setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
   loop();
 })();
