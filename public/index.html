@@ -457,14 +457,24 @@
       predictX = ball.x + ball.vx * t;
     }
     var ballComing = ball.x > netX - 30;
+    // Serve detection: ball is alive, has essentially no horizontal velocity,
+    // and is still well above the slime. Standing directly under it would
+    // bounce the ball straight back up (collision normal is vertical), so we
+    // stand offset to the RIGHT of where it'll land — that puts the ball on
+    // the slime's LEFT side at impact, angling the bounce toward the net.
+    var isServing = ball.live && Math.abs(ball.vx) < 0.5 && ball.y < GROUND - 100;
     var target;
     if(ballComing){
-      target = predictX;
-      if(opp.drop && ball.vy>0 && ball.x>netX+40 && Math.random()<0.02) target = netX + NET_W/2 + p2.r;
+      if(isServing){
+        target = predictX + p2.r * 0.75;
+      } else {
+        target = predictX;
+        if(opp.drop && ball.vy>0 && ball.x>netX+40 && Math.random()<0.02) target = netX + NET_W/2 + p2.r;
+      }
     } else {
       target = W*0.72;
     }
-    target = Math.max(netX + NET_W/2, Math.min(FIELD_R, target));
+    target = Math.max(netX + NET_W/2 + p2.r, Math.min(FIELD_R - p2.r, target));
     var lag = 1 - opp.react;
     var dead = 6 + lag*36;
     var ml=false, mr=false, jp=false;
