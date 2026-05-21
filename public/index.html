@@ -111,6 +111,22 @@
       font-size:10px; line-height:1.6;
       -webkit-text-stroke-width:1.5px;
     }
+    /* Pin the on-screen controls to the bottom of the viewport so the
+       player can always reach them without scrolling. */
+    #touchpad.show{
+      position:fixed; left:0; right:0; bottom:0;
+      max-width:none; width:100%;
+      padding:10px 12px;
+      background:rgba(20,24,40,0.85);
+      backdrop-filter:blur(6px);
+      -webkit-backdrop-filter:blur(6px);
+      box-shadow:0 -3px 12px rgba(0,0,0,0.4);
+      z-index:50;
+    }
+    /* Reserve scroll space so the chat/controls aren't permanently hidden
+       behind the fixed touchpad. Joystick layout is much taller than arrows. */
+    body.touch-arrows{ padding-bottom:90px; }
+    body.touch-joystick{ padding-bottom:175px; }
   }
 
   #controls{
@@ -164,6 +180,23 @@
     border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,0.15);
     padding:12px;
   }
+  #chat-header{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
+    color:#cfd6e4;
+  }
+  #chat-toggle{
+    background:transparent; border:1px solid #3a4150; border-radius:6px;
+    padding:4px 10px; color:#e8ecf4; font-size:12px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  #chat-toggle:hover{ background:#262c3b; }
+  #chat-toggle-icon{ display:inline-block; transition:transform .15s; }
+  #chat.collapsed #chat-toggle-icon{ transform:rotate(-90deg); }
+  #chat.collapsed{ gap:0; padding:8px 12px; }
+  #chat.collapsed > .row,
+  #chat.collapsed #chat-messages,
+  #chat.collapsed #chat-emoji-picker{ display:none; }
   #chat .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   #chat-profile-label{ font-size:12px; color:var(--text-secondary); }
   #chat-username-display{
@@ -321,6 +354,13 @@
   </div>
 
   <div id="chat">
+    <div id="chat-header">
+      <span>CHAT</span>
+      <button id="chat-toggle" type="button" aria-expanded="true" aria-controls="chat">
+        <span id="chat-toggle-label">Hide chat</span>
+        <span id="chat-toggle-icon">&#9662;</span>
+      </button>
+    </div>
     <div id="chat-profile" class="row">
       <span id="chat-profile-label">Username:</span>
       <span id="chat-username-display">Player</span>
@@ -1135,6 +1175,11 @@
   function applyTouchCtrl(){
     touchpadEl.classList.toggle('layout-arrows', touchCtrl === 'arrows');
     touchpadEl.classList.toggle('layout-joystick', touchCtrl === 'joystick');
+    // Drives the @media bottom-padding rule so content scrolls above the
+    // fixed touchpad without being hidden behind it.
+    var onTouch = isTouch();
+    document.body.classList.toggle('touch-arrows',   onTouch && touchCtrl === 'arrows');
+    document.body.classList.toggle('touch-joystick', onTouch && touchCtrl === 'joystick');
     document.getElementById('touchctrlbtn').textContent =
       'Touch: ' + (touchCtrl === 'joystick' ? 'Joystick' : 'Arrows');
     // Reset any held keys when switching, so a stuck press doesn't carry over.
@@ -1529,6 +1574,25 @@
 
   function chatRenderUsername(){ chatNameDisplay.textContent = chatUsername; }
   chatRenderUsername();
+
+  // Collapse toggle: lets mobile players hide the chat panel so the touchpad
+  // is easier to reach. Preference persists in localStorage.
+  var chatCollapsed = false;
+  try{ chatCollapsed = localStorage.getItem('slimeChatCollapsed') === '1'; }catch(e){}
+  var chatEl         = document.getElementById('chat');
+  var chatToggleBtn  = document.getElementById('chat-toggle');
+  var chatToggleLbl  = document.getElementById('chat-toggle-label');
+  function applyChatCollapsed(){
+    chatEl.classList.toggle('collapsed', chatCollapsed);
+    chatToggleLbl.textContent = chatCollapsed ? 'Show chat' : 'Hide chat';
+    chatToggleBtn.setAttribute('aria-expanded', chatCollapsed ? 'false' : 'true');
+  }
+  applyChatCollapsed();
+  chatToggleBtn.addEventListener('click', function(){
+    chatCollapsed = !chatCollapsed;
+    try{ localStorage.setItem('slimeChatCollapsed', chatCollapsed ? '1' : '0'); }catch(e){}
+    applyChatCollapsed();
+  });
 
   function chatSaveUsername(){
     var v = (chatNameInput.value || '').trim().slice(0, 16);
