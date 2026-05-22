@@ -292,8 +292,19 @@
     padding-bottom:8px;
     border-bottom:1px solid var(--border);
   }
-  #skin-rows{ display:flex; gap:18px; flex-wrap:wrap; }
+  #skin-grid{ display:flex; gap:18px; align-items:flex-start; }
+  .skin-col{ display:flex; flex-direction:column; gap:10px; min-width:0; }
+  #skin-col-players{ flex:1.4; border-right:1px solid var(--border); padding-right:18px; }
+  #skin-col-ball{ flex:1; }
+  #skin-grid .skin-boss{ align-self:flex-start; }
+  #theme-filter-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  @media (max-width:768px){
+    #skin-grid{ flex-direction:column; }
+    /* stacked on mobile: divider becomes horizontal */
+    #skin-col-players{ border-right:none; padding-right:0; border-bottom:1px solid var(--border); padding-bottom:10px; }
+  }
   .skin-picker{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .skin-picker.dimmed{ opacity:0.2; pointer-events:none; }
   .skin-label{
     font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
     color:#fff; text-shadow:1px 1px 0 rgba(0,0,0,0.45);
@@ -395,8 +406,6 @@
       <button id="onlinebtn">Online</button>
       <button id="modebtn">Mode: 1 Player</button>
       <button id="oppbtn">Opponent: White Slime</button>
-      <button id="filterbtn">Filter: Off</button>
-      <button id="themebtn">Theme: Grassy</button>
       <button id="touchctrlbtn" style="display:none;">Touch: Arrows</button>
       <button id="resetbtn">Reset</button>
       <button id="leavebtn" style="display:none;">Leave Room</button>
@@ -405,7 +414,8 @@
 
   <div id="skinpickers">
     <div id="skins-header">SKINS</div>
-    <div id="skin-rows">
+    <div id="skin-grid">
+    <div class="skin-col" id="skin-col-players">
     <div class="skin-picker" id="skin-p1">
       <span class="skin-label blue">player 1</span>
       <div class="swatches" data-side="p1"></div>
@@ -424,6 +434,8 @@
       </label>
       <button class="skin-boss" type="button" data-side="p2">Boss: Off</button>
     </div>
+    </div>
+    <div class="skin-col" id="skin-col-ball">
     <div class="skin-picker" id="skin-ball">
       <span class="skin-label ball">ball</span>
       <div class="swatches" data-side="ball"></div>
@@ -431,6 +443,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
         <input type="color" class="skin-custom" data-side="ball" />
       </label>
+    </div>
+      <div id="theme-filter-row">
+        <button id="themebtn">Theme: Grassy</button>
+        <button id="filterbtn">Filter: Off</button>
+      </div>
     </div>
     </div>
   </div>
@@ -2202,6 +2219,7 @@
     var p1Picker = document.getElementById('skin-p1');
     var p2Picker = document.getElementById('skin-p2');
     if(!p1Picker || !p2Picker) return;
+    p2Picker.classList.remove('dimmed');
     if(netMode === 'host'){
       p1Picker.style.display = '';
       p2Picker.style.display = 'none';
@@ -2212,9 +2230,10 @@
       p1Picker.style.display = '';
       p2Picker.style.display = '';
     } else {
-      // 1 Player: only blue (the user). AI opponent's color comes from OPPS.
+      // 1 Player: Player 2 (AI) isn't editable — keep it visible but dimmed.
       p1Picker.style.display = '';
-      p2Picker.style.display = 'none';
+      p2Picker.style.display = '';
+      p2Picker.classList.add('dimmed');
     }
   }
   // =================== END SKIN PICKER ===================
