@@ -425,8 +425,9 @@
   var SLIME_R = 40, BALL_R = 11;
   var NET_W = 6, NET_H = 56;
   var netX = W/2;
-  // Heavier ball: high gravity makes it fall fast (no floaty hang time).
-  var BALL_GRAV = 0.42;
+  // Floaty ball (classic slime-volleyball feel): gentle gravity gives the ball
+  // a long, readable hang time so rallies arc lazily like the original.
+  var BALL_GRAV = 0.30;
 
   // Height cap: the ball can't rise more than MAX_RISE px above its hit point.
   // From kinematics: v_max = sqrt(2 * g * h). This doubles as the off-screen
@@ -438,8 +439,11 @@
   // Separate caps so the ball can bounce high (for juggling) without traveling
   // fast across the court: MAX_VX limits horizontal pace, MAX_UP limits bounce
   // height, and MAX_SPEED is just an overall safety net above both combined.
-  var MAX_VX = 13.0;
+  var MAX_VX = 11.0;
   var MAX_SPEED = 17.0;
+  // Side walls absorb some horizontal speed on each bounce, so a hard spike to
+  // the far wall can't rebound all the way back across the court.
+  var WALL_BOUNCE = 0.7;
 
   var p1, p2, ball, scores, state, server, twoPlayer=false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
@@ -691,26 +695,27 @@
     // surface. (Previously the velocity was always rewritten, which nudged the
     // ball even when it was already leaving — a source of erratic bounces.)
     if(vn < 0){
-      // Reflect the normal component, then rotate the result partway toward a
-      // straight radial launch (out from the contact point) so the ball
-      // reliably pops up-and-away in a predictable direction instead of
-      // glancing off. Crucially we blend the DIRECTION only and renormalize to
-      // the reflected speed — a plain linear blend of two vectors shrinks the
-      // magnitude, which made angled hits (e.g. a push serve) lose momentum.
+      // Classic slime-volleyball bounce: launch the ball RADIALLY out from the
+      // slime's center through the contact point, at the incoming relative
+      // speed. This is what makes returns predictable — the direction is set by
+      // where on the dome you make contact (i.e. by positioning your slime),
+      // not by the incoming angle. We keep a small reflection component so it
+      // isn't perfectly robotic, blending direction only and renormalizing to
+      // the incoming speed (a plain vector blend would shrink it).
       var refX = rvx - 2*vn*nx;
       var refY = rvy - 2*vn*ny;
       var speed = Math.hypot(refX, refY);
-      var BLEND = 0.4;
+      var BLEND = 0.85;
       var bx = (1-BLEND)*refX + BLEND*nx*speed;
       var by = (1-BLEND)*refY + BLEND*ny*speed;
       var bmag = Math.hypot(bx, by) || 1;
       refX = bx/bmag*speed;
       refY = by/bmag*speed;
-      // Add a fraction of the slime's HORIZONTAL motion (for aiming). The
-      // slime's vertical motion is intentionally left out; the caps below keep
-      // the bounce bounded regardless.
-      ball.vx = refX + s.vx*0.5;
-      ball.vy = refY;
+      // Add the slime's full velocity so jumping INTO the ball spikes it and
+      // moving into it pushes it — like the original. The caps below keep the
+      // bounce bounded (and on screen) no matter how hard it's hit.
+      ball.vx = refX + s.vx;
+      ball.vy = refY + s.vy;
       if(ball.vy > -2) ball.vy = -2 - Math.abs(ball.vy)*0.3;
       // Height cap (also the off-screen guard): clamp upward speed to MAX_UP.
       if(ball.vy < -MAX_UP) ball.vy = -MAX_UP;
@@ -736,8 +741,8 @@
     for(var i=0; i<steps; i++){
       ball.x += stepX;
       ball.y += stepY;
-      if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx); }
-      if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx); }
+      if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx)*WALL_BOUNCE; }
+      if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx)*WALL_BOUNCE; }
       if(ball.x+ball.r > netLeft && ball.x-ball.r < netRight && ball.y+ball.r > netTop){
         if(ball.y < netTop && ball.vy>0){
           ball.vy = -Math.abs(ball.vy)*0.8; ball.y = netTop - ball.r;
@@ -1059,7 +1064,11 @@
   }
   // =================== END NETWORKING ===================
 
-  function loop(){
+  // One physics tick. All gameplay advances here at a FIXED rate (see loop()),
+  // so the speed is identical regardless of the monitor's refresh rate. (A
+  // raw requestAnimationFrame loop runs 2-4x too fast on 120/144/240Hz
+  // displays, which is why it looked too fast on some Windows machines.)
+  function step(){
     if(netMode === 'guest'){
       // Guest does NOT run physics. It sends its inputs and renders the state
       // the host broadcasts (applied in netOnMessage). Just send inputs here.
@@ -1090,7 +1099,7 @@
         updateBall();
       }
     }
-    // Host broadcasts the authoritative game state every frame.
+    // Host broadcasts the authoritative game state each tick.
     if(netMode === 'host'){ netBroadcastState(); }
     // drift clouds slowly in one direction, wrapping around the screen
     for(var ci=0; ci<CLOUDS.length; ci++){
@@ -1102,6 +1111,28 @@
         CLOUDS[ci].y = 16 + Math.floor(Math.random()*54);
       }
     }
+  }
+
+  // Fixed-timestep game loop: render every animation frame (smooth on any
+  // refresh rate) but advance the simulation in fixed 1/60s steps, catching up
+  // with however much real time elapsed since the last frame.
+  var STEP_MS = 1000 / 60;
+  var _lastT = 0, _accum = 0;
+  function loop(now){
+    if(!_lastT) _lastT = now;
+    var elapsed = now - _lastT;
+    _lastT = now;
+    // Clamp so a backgrounded tab (or a long stall) doesn't unleash a flood of
+    // catch-up steps when it resumes.
+    if(elapsed > 250) elapsed = 250;
+    _accum += elapsed;
+    var n = 0;
+    while(_accum >= STEP_MS && n < 5){
+      step();
+      _accum -= STEP_MS;
+      n++;
+    }
+    if(n >= 5) _accum = 0; // couldn't keep up; drop the backlog
     draw();
     requestAnimationFrame(loop);
   }
@@ -1788,7 +1819,7 @@
   init();
   updateSkinPickerVisibility();
   setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
-  loop();
+  requestAnimationFrame(loop);
 })();
 </script>
 </body>
