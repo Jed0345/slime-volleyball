@@ -657,7 +657,7 @@
     scores = {p1:0, p2:0};
     server = 'p1';
     state = 'menu';
-    if(WIN !== DEFAULT_WIN) setWin(DEFAULT_WIN); // offline always plays to the default
+    setWin(DEFAULT_WIN); // offline always plays to the default; also (re)renders the "FIRST TO N" label from WIN
     resetPositions(server);
     updateScore();
     updateLabels();
