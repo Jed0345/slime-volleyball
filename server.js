@@ -84,10 +84,42 @@ wss.on("connection", (ws) => {
         send(ws, { type: "error", reason: "Room code already in use." });
         return;
       }
-      rooms.set(code, { host: ws, guest: null });
+      rooms.set(code, { host: ws, guest: null, graceTimer: null });
       ws.roomCode = code;
       ws.role = "host";
       send(ws, { type: "created", code });
+      return;
+    }
+
+    // Reclaim a slot in an existing room after a refresh/brief disconnect.
+    if (msg.type === "rejoin") {
+      const room = rooms.get(msg.code);
+      const slot = msg.role === "host" ? "host" : "guest";
+      if (!room || room[slot]) {
+        send(ws, { type: "rejoin-failed" });
+        return;
+      }
+      room[slot] = ws;
+      ws.roomCode = msg.code;
+      ws.role = slot;
+      if (room.graceTimer) { clearTimeout(room.graceTimer); room.graceTimer = null; }
+      send(ws, { type: "rejoined", code: msg.code, role: slot });
+      const peer = otherPeer(room, ws);
+      if (peer) send(peer, { type: "peer-rejoined" });
+      return;
+    }
+
+    // Explicit leave: tear the room down immediately (no grace period).
+    if (msg.type === "leave") {
+      const room = rooms.get(ws.roomCode);
+      if (room) {
+        const peer = otherPeer(room, ws);
+        if (peer) send(peer, { type: "peer-left" });
+        if (room.graceTimer) clearTimeout(room.graceTimer);
+        rooms.delete(ws.roomCode);
+      }
+      ws.roomCode = null;
+      ws.role = null;
       return;
     }
 
@@ -105,6 +137,7 @@ wss.on("connection", (ws) => {
       room.guest = ws;
       ws.roomCode = code;
       ws.role = "guest";
+      if (room.graceTimer) { clearTimeout(room.graceTimer); room.graceTimer = null; }
       send(ws, { type: "joined", code });
       send(room.host, { type: "peer-joined" });
       send(room.guest, { type: "start" });
@@ -118,10 +151,29 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    const room = rooms.get(ws.roomCode);
+    const code = ws.roomCode;
+    const room = rooms.get(code);
     if (!room) return;
-    send(otherPeer(room, ws), { type: "peer-left" });
-    rooms.delete(ws.roomCode);
+    const peer = otherPeer(room, ws);
+    // Free this player's slot but keep the room briefly so they can rejoin
+    // after a refresh without kicking the opponent out.
+    if (room.host === ws) room.host = null;
+    else if (room.guest === ws) room.guest = null;
+    if (!room.host && !room.guest) {
+      if (room.graceTimer) clearTimeout(room.graceTimer);
+      rooms.delete(code);
+      return;
+    }
+    if (peer) send(peer, { type: "peer-dropped" });
+    if (room.graceTimer) clearTimeout(room.graceTimer);
+    room.graceTimer = setTimeout(() => {
+      const r = rooms.get(code);
+      if (!r) return;
+      const remaining = r.host || r.guest;
+      if (remaining) send(remaining, { type: "peer-left" });
+      clearTimeout(r.graceTimer);
+      rooms.delete(code);
+    }, 15000);
   });
 });
 

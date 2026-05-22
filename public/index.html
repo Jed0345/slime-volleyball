@@ -204,6 +204,8 @@
     display:flex; align-items:center; justify-content:space-between; gap:8px;
     font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
     color:#cfd6e4;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--border);
   }
   #chat-toggle{
     background:transparent; border:1px solid #3a4150; border-radius:6px;
@@ -214,6 +216,7 @@
   #chat-toggle-icon{ display:inline-block; transition:transform .15s; }
   #chat.collapsed #chat-toggle-icon{ transform:rotate(-90deg); }
   #chat.collapsed{ gap:0; padding:8px 12px; }
+  #chat.collapsed #chat-header{ padding-bottom:0; border-bottom:none; }
   #chat.collapsed > .row,
   #chat.collapsed #chat-messages,
   #chat.collapsed #chat-emoji-picker{ display:none; }
@@ -278,13 +281,25 @@
   #stage:not([data-filter="off"]) #game{ visibility:hidden; }
 
   #skinpickers{
-    display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
     width:100%; max-width:750px;
+    display:flex; flex-direction:column; gap:10px;
+    border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,0.15);
+    padding:12px;
   }
+  #skins-header{
+    font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
+    color:#cfd6e4;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--border);
+  }
+  #skin-rows{ display:flex; gap:18px; flex-wrap:wrap; }
   .skin-picker{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .skin-label{
     font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
     color:#fff; text-shadow:1px 1px 0 rgba(0,0,0,0.45);
+    text-transform:capitalize;
+    padding-right:10px;
+    border-right:1px solid var(--border);
   }
   .skin-label.blue{ color:#bfe0ff; }
   .skin-label.pink{ color:#ffc8dd; }
@@ -382,12 +397,15 @@
       <button id="filterbtn">Filter: Off</button>
       <button id="touchctrlbtn" style="display:none;">Touch: Arrows</button>
       <button id="resetbtn">Reset</button>
+      <button id="leavebtn" style="display:none;">Leave Room</button>
     </div>
   </div>
 
   <div id="skinpickers">
+    <div id="skins-header">SKINS</div>
+    <div id="skin-rows">
     <div class="skin-picker" id="skin-p1">
-      <span class="skin-label blue">BLUE SKIN</span>
+      <span class="skin-label blue">player 1</span>
       <div class="swatches" data-side="p1"></div>
       <label class="skin-eyedropper" title="Custom color" aria-label="Custom color">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
@@ -396,13 +414,14 @@
       <button class="skin-boss" type="button" data-side="p1">Boss: Off</button>
     </div>
     <div class="skin-picker" id="skin-p2" style="display:none;">
-      <span class="skin-label pink">PINK SKIN</span>
+      <span class="skin-label pink">player 2</span>
       <div class="swatches" data-side="p2"></div>
       <label class="skin-eyedropper" title="Custom color" aria-label="Custom color">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
         <input type="color" class="skin-custom" data-side="p2" />
       </label>
       <button class="skin-boss" type="button" data-side="p2">Boss: Off</button>
+    </div>
     </div>
   </div>
 
@@ -528,6 +547,7 @@
   var p1, p2, ball, scores, state, server, twoPlayer=false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
   var netMode = null;
+  var netPaused = false; // true while the opponent is mid-reconnect (grace window)
   var netInput = {left:false, right:false, jump:false}; // guest's remote inputs (host reads these)
 
   var BLUE = '#2f7fd6', BLUE_D = '#1c3f6e';
@@ -1066,6 +1086,21 @@
     netConnect(function(){ netSend({type:'join', code:code}); });
   }
 
+  // Remember the current online room so a page refresh can rejoin it instead of
+  // dropping out. Cleared only when the room truly ends (leave / opponent gone).
+  function saveRoom(code, role){ try{ localStorage.setItem('slimeRoom', JSON.stringify({code:code, role:role})); }catch(e){} }
+  function loadRoom(){ try{ return JSON.parse(localStorage.getItem('slimeRoom')); }catch(e){ return null; } }
+  function clearRoom(){ try{ localStorage.removeItem('slimeRoom'); }catch(e){} }
+
+  function netRejoin(code, role){
+    netConnect(function(){ netSend({type:'rejoin', code:code, role:role}); });
+  }
+  function netLeave(){
+    netSend({type:'leave'});
+    clearRoom();
+    location.reload();
+  }
+
   // Guest sends its current key state to the host (only when it changes).
   function netSendInput(){
     var inp = {
@@ -1113,6 +1148,9 @@
     document.getElementById('p2name').textContent = 'PINK';
     document.getElementById('oppbtn').style.display = 'none';
     document.getElementById('modebtn').style.display = 'none';
+    document.getElementById('resetbtn').style.display = 'none';
+    document.getElementById('leavebtn').style.display = '';
+    netPaused = false;
     document.getElementById('controlhint').innerHTML =
       asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
              : 'You are <b>PINK</b> &middot; Move/jump: <b>A / W / D</b> or arrows';
@@ -1141,16 +1179,42 @@
     var m;
     try{ m = JSON.parse(ev.data); }catch(e){ return; }
 
-    if(m.type === 'created'){ lobbyStatus('Share this code: ' + m.code + ' — waiting for a friend to join...'); return; }
-    if(m.type === 'joined'){ lobbyStatus('Joined! Starting...'); return; }
+    if(m.type === 'created'){ saveRoom(m.code, 'host'); lobbyStatus('Share this code: ' + m.code + ' — waiting for a friend to join...'); return; }
+    if(m.type === 'joined'){ saveRoom(m.code, 'guest'); lobbyStatus('Joined! Starting...'); return; }
     if(m.type === 'error'){ lobbyStatus(m.reason || 'Error.'); return; }
     if(m.type === 'peer-joined'){ startOnlineMatch(true); return; }   // host: a guest connected
     if(m.type === 'start'){ startOnlineMatch(false); return; }        // guest: match begins
+    // Reconnection: we reclaimed our slot after a refresh.
+    if(m.type === 'rejoined'){ startOnlineMatch(m.role === 'host'); return; }
+    if(m.type === 'rejoin-failed'){
+      clearRoom();
+      netMode = null;
+      lobbyStatus('That room is no longer available.');
+      setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
+      return;
+    }
+    // The opponent dropped (maybe refreshing) — pause and wait out the grace window.
+    if(m.type === 'peer-dropped'){
+      netPaused = true;
+      setMsg('OPPONENT', 'RECONNECTING...');
+      return;
+    }
+    if(m.type === 'peer-rejoined'){
+      netPaused = false;
+      // Resend our identity so the reconnected peer has our color/name/target again.
+      var side = (netMode === 'host') ? 'p1' : 'p2';
+      netSend({type:'skin', side: side, color: slimeSkins[side].color, boss: slimeSkins[side].boss});
+      netSend({type:'name', name: chatUsername});
+      if(netMode === 'host'){ netSend({type:'config', win: WIN}); }
+      return;
+    }
     if(m.type === 'peer-left'){
       lobbyStatus('');
       setMsg('OPPONENT LEFT', 'RELOAD TO PLAY AGAIN');
       state = 'gameover';
       netMode = null;
+      netPaused = false;
+      clearRoom();
       hideRematch();
       chatSetConnected(false);
       return;
@@ -1274,7 +1338,7 @@
       // Guest does NOT run physics. It sends its inputs and renders the state
       // the host broadcasts (applied in netOnMessage). Just send inputs here.
       netSendInput();
-    } else if(state==='play'){
+    } else if(state==='play' && !netPaused){
       if(netMode === 'host'){
         // Host controls the blue slime locally; pink slime uses the guest's
         // relayed inputs. Host runs all physics and broadcasts the result.
@@ -1482,8 +1546,10 @@
   });
 
   document.getElementById('resetbtn').addEventListener('click', function(){
-    if(netMode){ location.reload(); return; }   // simplest reliable reset for online
     init(); setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
+  });
+  document.getElementById('leavebtn').addEventListener('click', function(){
+    netLeave(); // tells the server, clears the saved room, then reloads to offline
   });
   document.getElementById('oppbtn').addEventListener('click', function(){
     oppIdx = (oppIdx+1)%OPPS.length;
@@ -2057,6 +2123,14 @@
   updateSkinPickerVisibility();
   setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
   requestAnimationFrame(loop);
+
+  // If we were in an online room before a refresh, transparently rejoin it.
+  (function tryRejoinSavedRoom(){
+    var saved = loadRoom();
+    if(!saved || !saved.code || !saved.role) return;
+    setMsg('RECONNECTING', 'REJOINING ' + saved.code + '...');
+    netRejoin(saved.code, saved.role);
+  })();
 })();
 </script>
 </body>
