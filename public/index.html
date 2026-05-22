@@ -705,7 +705,7 @@
       var refX = rvx - 2*vn*nx;
       var refY = rvy - 2*vn*ny;
       var speed = Math.hypot(refX, refY);
-      var BLEND = 0.85;
+      var BLEND = 0.6;
       var bx = (1-BLEND)*refX + BLEND*nx*speed;
       var by = (1-BLEND)*refY + BLEND*ny*speed;
       var bmag = Math.hypot(bx, by) || 1;
@@ -716,7 +716,10 @@
       // bounce bounded (and on screen) no matter how hard it's hit.
       ball.vx = refX + s.vx;
       ball.vy = refY + s.vy;
-      if(ball.vy > -2) ball.vy = -2 - Math.abs(ball.vy)*0.3;
+      // No forced upward pop: a hit near the EDGE of the dome stays flat and
+      // can carry the ball's downward momentum through, so edge contacts drive
+      // the ball down/forward (a smash) while tip contacts lob it up — the way
+      // contact position dictates angle in the original.
       // Height cap (also the off-screen guard): clamp upward speed to MAX_UP.
       if(ball.vy < -MAX_UP) ball.vy = -MAX_UP;
       // Horizontal cap (independent of bounce height) keeps cross-court pace down.
