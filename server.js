@@ -25,6 +25,7 @@ const MIME = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".png": "image/png",
+  ".webp": "image/webp",
   ".json": "application/json",
   ".ico": "image/x-icon",
 };

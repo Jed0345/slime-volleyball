@@ -303,6 +303,7 @@
   }
   .skin-label.blue{ color:#bfe0ff; }
   .skin-label.pink{ color:#ffc8dd; }
+  .skin-label.ball{ color:#ffd23f; }
   .swatches{ display:flex; gap:5px; flex-wrap:wrap; }
   .swatch{
     width:20px; height:20px; padding:0;
@@ -395,6 +396,7 @@
       <button id="modebtn">Mode: 1 Player</button>
       <button id="oppbtn">Opponent: White Slime</button>
       <button id="filterbtn">Filter: Off</button>
+      <button id="themebtn">Theme: Grassy</button>
       <button id="touchctrlbtn" style="display:none;">Touch: Arrows</button>
       <button id="resetbtn">Reset</button>
       <button id="leavebtn" style="display:none;">Leave Room</button>
@@ -421,6 +423,14 @@
         <input type="color" class="skin-custom" data-side="p2" />
       </label>
       <button class="skin-boss" type="button" data-side="p2">Boss: Off</button>
+    </div>
+    <div class="skin-picker" id="skin-ball">
+      <span class="skin-label ball">ball</span>
+      <div class="swatches" data-side="ball"></div>
+      <label class="skin-eyedropper" title="Custom ball color" aria-label="Custom ball color">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
+        <input type="color" class="skin-custom" data-side="ball" />
+      </label>
     </div>
     </div>
   </div>
@@ -506,6 +516,19 @@
   var CLOUD = '#ffffff', CLOUD_SHADE = '#dfeefb';
   var NETCOL = '#f4f4f4';
 
+  // Environment theme: 'grassy' (the painted green court, default) or 'city'
+  // (the rooftop photo as the backdrop, clouds drifting over it).
+  var theme = 'grassy';
+  try{ var _st = localStorage.getItem('slimeTheme'); if(_st === 'city' || _st === 'grassy') theme = _st; }catch(e){}
+  var cityImg = new Image();
+  var cityImgReady = false;
+  cityImg.onload = function(){ cityImgReady = true; };
+  cityImg.src = 'city.webp';
+  // Top-of-image sky color (fills the strip above the photo) and the source-image
+  // row of the rooftop floor, so the floor lines up with the game's GROUND.
+  var CITY_SKY = '#078ffc';
+  var CITY_FLOOR_SRC = 700;
+
   // Speeds are scaled to the player's MOVE speed (6.25). react = how tightly
   // the AI tracks (1 = no lag), jumpChance = how eagerly it jumps to hit.
   // Difficulty ramps White -> Red -> Master -> Psycho -> Big Blue.
@@ -562,6 +585,13 @@
     '#222222', // black
     '#f3f3f3'  // white
   ];
+  // Ball color presets (pink, green, yellow, white) shown alongside the eyedropper.
+  var BALL_SKINS = [
+    '#e8537f', // pink
+    '#5dd663', // green
+    '#f4b73e', // yellow
+    '#f3f3f3'  // white
+  ];
   // Boss skins: cosmetic-only (color + optional effect). Cycled with the "Boss"
   // button; selecting one overrides the chosen color. The flash flag gives the
   // Psycho Slime skin the same strobing effect as the AI Psycho boss.
@@ -578,6 +608,7 @@
   }
   // Per side: a chosen color and an optional boss skin name ('' = none).
   var slimeSkins = { p1: {color: BLUE, boss: ''}, p2: {color: PINK, boss: ''} };
+  var ballColor = '#ffd23f'; // default gold; changeable in the skins panel
   function skinDark(hex){ return darken(hex, 0.45); }
 
   // In online play, each side's scoreboard label shows the player's chosen
@@ -925,13 +956,48 @@
       col = flashOn ? s.col : '#ffe14d';
       outline = flashOn ? darken(s.cold, 0.7) : '#6e5a00';
     }
+    // Cast shadow + lit shading only in the city theme (light from the upper
+    // left). The default grassy theme keeps the flat, shadow-free look.
+    if(theme === 'city'){
+      var hAbove = GROUND - s.y;
+      var sc = Math.max(0.45, 1 - hAbove/420);
+      var shX = s.x + s.r*0.35; // shadow to the lower-right
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,' + (0.28*sc).toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.ellipse(shX, GROUND, s.r*0.92*sc, s.r*0.20*sc, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
     // dome shape (arc + flat bottom)
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.r, Math.PI, 0);
     ctx.closePath();
     ctx.fillStyle = col;
     ctx.fill();
+    // Inner shading clipped to the dome: a soft highlight at the upper-left and
+    // a shadow toward the lower-right, selling a single upper-left light source.
+    if(theme === 'city'){
+      ctx.save();
+      ctx.clip();
+      var hi = ctx.createRadialGradient(s.x - s.r*0.45, s.y - s.r*0.65, s.r*0.05,
+                                        s.x - s.r*0.45, s.y - s.r*0.65, s.r*1.15);
+      hi.addColorStop(0, 'rgba(255,255,255,0.35)');
+      hi.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hi;
+      ctx.fillRect(s.x - s.r, s.y - s.r, s.r*2, s.r);
+      var sh = ctx.createLinearGradient(s.x - s.r*0.5, s.y - s.r*0.8, s.x + s.r*0.7, s.y);
+      sh.addColorStop(0, 'rgba(0,0,0,0)');
+      sh.addColorStop(0.55, 'rgba(0,0,0,0)');
+      sh.addColorStop(1, 'rgba(0,0,0,0.40)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(s.x - s.r, s.y - s.r, s.r*2, s.r);
+      ctx.restore();
+    }
     // outline: a darker analogous shade in the slime's own color family
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, Math.PI, 0);
+    ctx.closePath();
     ctx.lineJoin = 'round';
     ctx.strokeStyle = outline;
     ctx.lineWidth = 2;
@@ -1013,31 +1079,52 @@
     ctx.drawImage(img, Math.round(b.x*W - sp.w/2), Math.round(baseY - sp.h), sp.w, sp.h);
   }
 
+  // City theme backdrop: the rooftop photo scaled to the court width and
+  // positioned so its rooftop floor sits on the game's GROUND line. The strip
+  // above the photo is filled with the image's own sky color so it's seamless.
+  function drawCityBg(){
+    ctx.fillStyle = CITY_SKY; ctx.fillRect(0, 0, W, H);
+    if(cityImgReady){
+      var scale = W / cityImg.naturalWidth;
+      var dh = cityImg.naturalHeight * scale;
+      var y0 = GROUND - CITY_FLOOR_SRC * scale - 26; // nudge the backdrop up
+      ctx.drawImage(cityImg, 0, y0, W, dh);
+    }
+  }
+
   function draw(){
-    var sky = ctx.createLinearGradient(0, 0, 0, GROUND);
-    sky.addColorStop(0, SKY_TOP);
-    sky.addColorStop(1, SKY_BOT);
-    ctx.fillStyle = sky; ctx.fillRect(0,0,W,GROUND);
-    // clouds (behind everything but sky)
+    if(theme === 'city'){
+      drawCityBg();
+    } else {
+      var sky = ctx.createLinearGradient(0, 0, 0, GROUND);
+      sky.addColorStop(0, SKY_TOP);
+      sky.addColorStop(1, SKY_BOT);
+      ctx.fillStyle = sky; ctx.fillRect(0,0,W,GROUND);
+    }
+    // clouds drift over both themes (behind everything but the sky/backdrop)
     for(var c=0;c<CLOUDS.length;c++){ drawCloud(CLOUDS[c]); }
-    // bushes at the back of the ground plane (drawn before the court so the
-    // court surface overlaps their bottoms)
-    for(var b=0;b<BUSHES.length;b++){ drawBush(BUSHES[b]); }
-    // court
-    ctx.fillStyle = COURT; ctx.fillRect(0, GROUND, W, H-GROUND);
-    ctx.strokeStyle = COURTLINE; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(0, GROUND); ctx.lineTo(W, GROUND); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    ctx.fillRect(0,0,WALL,GROUND); ctx.fillRect(W-WALL,0,WALL,GROUND);
+    if(theme !== 'city'){
+      // bushes at the back of the ground plane (drawn before the court so the
+      // court surface overlaps their bottoms)
+      for(var b=0;b<BUSHES.length;b++){ drawBush(BUSHES[b]); }
+      // court
+      ctx.fillStyle = COURT; ctx.fillRect(0, GROUND, W, H-GROUND);
+      ctx.strokeStyle = COURTLINE; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(0, GROUND); ctx.lineTo(W, GROUND); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(0,0,WALL,GROUND); ctx.fillRect(W-WALL,0,WALL,GROUND);
+    }
     ctx.fillStyle = NETCOL;
     ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H);
     flashT++;
     drawSlime(p1);
     drawSlime(p2);
-    ctx.fillStyle = '#ffd23f';
+    // Strong dark outline ring (drawn as a slightly larger circle behind the
+    // body) so the ball stays high-contrast against any background.
+    ctx.fillStyle = '#241700';
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r + 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = ballColor;
     ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = '#b8860b'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.stroke();
   }
 
   // ===================== NETWORKING =====================
@@ -1551,6 +1638,14 @@
   document.getElementById('leavebtn').addEventListener('click', function(){
     netLeave(); // tells the server, clears the saved room, then reloads to offline
   });
+  var themeBtn = document.getElementById('themebtn');
+  function applyTheme(){ themeBtn.textContent = 'Theme: ' + (theme === 'city' ? 'City' : 'Grassy'); }
+  applyTheme();
+  themeBtn.addEventListener('click', function(){
+    theme = (theme === 'grassy') ? 'city' : 'grassy';
+    try{ localStorage.setItem('slimeTheme', theme); }catch(e){}
+    applyTheme();
+  });
   document.getElementById('oppbtn').addEventListener('click', function(){
     oppIdx = (oppIdx+1)%OPPS.length;
     init();
@@ -2041,6 +2136,11 @@
   // Pick a preset/custom color: clears any boss skin (color and boss are
   // mutually exclusive — you're either a color or a boss).
   function selectColor(side, col){
+    if(side === 'ball'){
+      ballColor = col;
+      updateSkinControls('ball');
+      return;
+    }
     slimeSkins[side].color = col;
     slimeSkins[side].boss = '';
     applySkinToControlledSlime(side);
@@ -2058,28 +2158,30 @@
     syncSkin(side);
   }
   function updateSkinControls(side){
-    var sk = slimeSkins[side];
+    var col = (side === 'ball') ? ballColor : slimeSkins[side].color;
+    var boss = (side === 'ball') ? '' : slimeSkins[side].boss;
     var container = document.querySelector('.swatches[data-side="' + side + '"]');
     if(container){
       var sws = container.querySelectorAll('.swatch');
       for(var i=0;i<sws.length;i++){
-        sws[i].classList.toggle('selected', !sk.boss && sws[i].dataset.col === sk.color);
+        sws[i].classList.toggle('selected', !boss && sws[i].dataset.col === col);
       }
     }
     var custom = document.querySelector('.skin-custom[data-side="' + side + '"]');
-    if(custom && !sk.boss && /^#[0-9a-fA-F]{6}$/.test(sk.color)){ custom.value = sk.color; }
+    if(custom && !boss && /^#[0-9a-fA-F]{6}$/.test(col)){ custom.value = col; }
     var bossBtn = document.querySelector('.skin-boss[data-side="' + side + '"]');
     if(bossBtn){
-      bossBtn.textContent = sk.boss ? ('Boss: ' + sk.boss) : 'Boss: Off';
-      bossBtn.classList.toggle('active', !!sk.boss);
+      bossBtn.textContent = boss ? ('Boss: ' + boss) : 'Boss: Off';
+      bossBtn.classList.toggle('active', !!boss);
     }
   }
   function buildSwatches(){
-    ['p1','p2'].forEach(function(side){
+    ['p1','p2','ball'].forEach(function(side){
       var container = document.querySelector('.swatches[data-side="' + side + '"]');
       if(container){
         container.innerHTML = '';
-        SKINS.forEach(function(col){
+        var presets = (side === 'ball') ? BALL_SKINS : SKINS;
+        presets.forEach(function(col){
           var btn = document.createElement('button');
           btn.className = 'swatch';
           btn.style.background = col;
