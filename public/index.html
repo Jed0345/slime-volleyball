@@ -419,20 +419,27 @@
   ];
   var oppIdx = 0;
 
-  var GRAV = 0.72;
+  var GRAV = 1.38;
   var MOVE = 6.25;
-  var JUMP = 17.0;
+  var JUMP = 20.0;
   var SLIME_R = 40, BALL_R = 11;
   var NET_W = 6, NET_H = 56;
   var netX = W/2;
-  var BALL_GRAV = 0.24;
+  // Heavier ball: high gravity makes it fall fast (no floaty hang time).
+  var BALL_GRAV = 0.42;
 
   // Height cap: the ball can't rise more than MAX_RISE px above its hit point.
-  // From kinematics: v_max = sqrt(2 * g * h). Kept low so juggling the ball on
-  // your own side stays controlled instead of floating up near the ceiling.
-  var MAX_RISE = 175;
+  // From kinematics: v_max = sqrt(2 * g * h). This doubles as the off-screen
+  // guard together with the slime's jump height (see JUMP/GRAV): jumpHeight +
+  // MAX_RISE must stay under ~287px so even a full-power apex spike can't push
+  // the ball off the top — no ceiling collision needed.
+  var MAX_RISE = 130;
   var MAX_UP = Math.sqrt(2 * BALL_GRAV * MAX_RISE);
-  var MAX_SPEED = 10.5;
+  // Separate caps so the ball can bounce high (for juggling) without traveling
+  // fast across the court: MAX_VX limits horizontal pace, MAX_UP limits bounce
+  // height, and MAX_SPEED is just an overall safety net above both combined.
+  var MAX_VX = 13.0;
+  var MAX_SPEED = 17.0;
 
   var p1, p2, ball, scores, state, server, twoPlayer=false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
@@ -663,24 +670,54 @@
     var dy = ball.y - s.y;
     var dist = Math.hypot(dx, dy);
     var minD = s.r + ball.r;
-    if(dist < minD && dy <= 2){
-      var nx = dx/(dist||1), ny = dy/(dist||1);
-      ball.x = s.x + nx*(minD+0.5);
-      ball.y = s.y + ny*(minD+0.5);
-      var rvx = ball.vx - s.vx;
-      var rvy = ball.vy - s.vy;
-      var dot = rvx*nx + rvy*ny;
-      if(dot < 0){
-        rvx = rvx - 2*dot*nx;
-        rvy = rvy - 2*dot*ny;
-      }
-      // Add only a fraction of the slime's HORIZONTAL motion (for aiming).
-      // Do NOT add the slime's upward jump velocity, which made the ball rocket up.
-      ball.vx = rvx + s.vx*0.5;
-      ball.vy = rvy;
+    // The slime is a dome (upper hemisphere). Only collide when the ball is at
+    // or above the slime's center line; the region below the center is the
+    // flat bottom and has no surface.
+    if(dist >= minD || dy > 0) return;
+    // Contact normal from slime center out to the ball. Guard the degenerate
+    // near-center case so a tiny dx/dy can't produce a wild direction.
+    var nx, ny;
+    if(dist < 0.01){ nx = 0; ny = -1; }
+    else { nx = dx/dist; ny = dy/dist; }
+    // Always push the ball out onto the dome surface so it never sits inside
+    // the slime, even if it's already moving away.
+    ball.x = s.x + nx*(minD+0.5);
+    ball.y = s.y + ny*(minD+0.5);
+    // Ball velocity relative to the slime, and its component along the normal.
+    var rvx = ball.vx - s.vx;
+    var rvy = ball.vy - s.vy;
+    var vn = rvx*nx + rvy*ny;
+    // Only change the velocity when the ball is actually moving INTO the
+    // surface. (Previously the velocity was always rewritten, which nudged the
+    // ball even when it was already leaving — a source of erratic bounces.)
+    if(vn < 0){
+      // Reflect the normal component, then rotate the result partway toward a
+      // straight radial launch (out from the contact point) so the ball
+      // reliably pops up-and-away in a predictable direction instead of
+      // glancing off. Crucially we blend the DIRECTION only and renormalize to
+      // the reflected speed — a plain linear blend of two vectors shrinks the
+      // magnitude, which made angled hits (e.g. a push serve) lose momentum.
+      var refX = rvx - 2*vn*nx;
+      var refY = rvy - 2*vn*ny;
+      var speed = Math.hypot(refX, refY);
+      var BLEND = 0.4;
+      var bx = (1-BLEND)*refX + BLEND*nx*speed;
+      var by = (1-BLEND)*refY + BLEND*ny*speed;
+      var bmag = Math.hypot(bx, by) || 1;
+      refX = bx/bmag*speed;
+      refY = by/bmag*speed;
+      // Add a fraction of the slime's HORIZONTAL motion (for aiming). The
+      // slime's vertical motion is intentionally left out; the caps below keep
+      // the bounce bounded regardless.
+      ball.vx = refX + s.vx*0.5;
+      ball.vy = refY;
       if(ball.vy > -2) ball.vy = -2 - Math.abs(ball.vy)*0.3;
-      // Height cap: clamp upward speed so the ball can't exceed MAX_RISE.
+      // Height cap (also the off-screen guard): clamp upward speed to MAX_UP.
       if(ball.vy < -MAX_UP) ball.vy = -MAX_UP;
+      // Horizontal cap (independent of bounce height) keeps cross-court pace down.
+      if(ball.vx > MAX_VX) ball.vx = MAX_VX;
+      if(ball.vx < -MAX_VX) ball.vx = -MAX_VX;
+      // Overall safety net.
       var sp = Math.hypot(ball.vx, ball.vy);
       if(sp>MAX_SPEED){ ball.vx*=MAX_SPEED/sp; ball.vy*=MAX_SPEED/sp; }
     }
@@ -689,28 +726,37 @@
   function updateBall(){
     if(!ball.live) return;
     ball.vy += BALL_GRAV;
-    ball.x += ball.vx;
-    ball.y += ball.vy;
-    if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx); }
-    if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx); }
-    // Ceiling: keep the ball on screen; bounce it back down with damping so a
-    // hard hit can't send it above the top of the court.
-    if(ball.y < ball.r){ ball.y = ball.r; ball.vy = Math.abs(ball.vy) * 0.6; }
+    // Sub-step the movement so a fast ball can't sink deep into (or tunnel
+    // through) a slime before the collision is detected. Each sub-step advances
+    // the ball at most ~half its radius and resolves all collisions, so the
+    // contact normal is computed from a shallow overlap and the bounce is clean.
+    var steps = Math.max(1, Math.ceil(Math.hypot(ball.vx, ball.vy) / (ball.r * 0.5)));
+    var stepX = ball.vx / steps, stepY = ball.vy / steps;
     var netLeft = netX - NET_W/2, netRight = netX + NET_W/2, netTop = GROUND - NET_H;
-    if(ball.x+ball.r > netLeft && ball.x-ball.r < netRight && ball.y+ball.r > netTop){
-      if(ball.y < netTop && ball.vy>0){
-        ball.vy = -Math.abs(ball.vy)*0.8; ball.y = netTop - ball.r;
-      } else {
-        if(ball.x < netX){ ball.x = netLeft - ball.r; ball.vx = -Math.abs(ball.vx); }
-        else { ball.x = netRight + ball.r; ball.vx = Math.abs(ball.vx); }
+    for(var i=0; i<steps; i++){
+      ball.x += stepX;
+      ball.y += stepY;
+      if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx); }
+      if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx); }
+      if(ball.x+ball.r > netLeft && ball.x-ball.r < netRight && ball.y+ball.r > netTop){
+        if(ball.y < netTop && ball.vy>0){
+          ball.vy = -Math.abs(ball.vy)*0.8; ball.y = netTop - ball.r;
+        } else {
+          if(ball.x < netX){ ball.x = netLeft - ball.r; ball.vx = -Math.abs(ball.vx); }
+          else { ball.x = netRight + ball.r; ball.vx = Math.abs(ball.vx); }
+        }
       }
-    }
-    collideSlime(p1);
-    collideSlime(p2);
-    if(ball.y >= GROUND - ball.r){
-      ball.y = GROUND - ball.r;
-      ball.live = false;
-      if(ball.x < netX) scorePoint('p2'); else scorePoint('p1');
+      collideSlime(p1);
+      collideSlime(p2);
+      if(ball.y >= GROUND - ball.r){
+        ball.y = GROUND - ball.r;
+        ball.live = false;
+        if(ball.x < netX) scorePoint('p2'); else scorePoint('p1');
+        return;
+      }
+      // Collisions above may have changed the velocity; advance the remaining
+      // sub-steps with the updated value.
+      stepX = ball.vx / steps; stepY = ball.vy / steps;
     }
   }
 
