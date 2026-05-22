@@ -292,9 +292,9 @@
     padding-bottom:8px;
     border-bottom:1px solid var(--border);
   }
-  #skin-grid{ display:flex; gap:18px; align-items:flex-start; }
+  #skin-grid{ display:flex; gap:22px; align-items:flex-start; }
   .skin-col{ display:flex; flex-direction:column; gap:10px; min-width:0; }
-  #skin-col-players{ flex:1.4; border-right:1px solid var(--border); padding-right:18px; }
+  #skin-col-players{ flex:1.4; border-right:1px solid var(--border); padding-right:10px; }
   #skin-col-ball{ flex:1; }
   #skin-grid .skin-boss{ align-self:flex-start; }
   #theme-filter-row{ display:flex; gap:8px; flex-wrap:wrap; }
@@ -2188,7 +2188,7 @@
     if(custom && !boss && /^#[0-9a-fA-F]{6}$/.test(col)){ custom.value = col; }
     var bossBtn = document.querySelector('.skin-boss[data-side="' + side + '"]');
     if(bossBtn){
-      bossBtn.textContent = boss ? ('Boss: ' + boss) : 'Boss: Off';
+      bossBtn.textContent = boss ? boss : 'Boss: Off';
       bossBtn.classList.toggle('active', !!boss);
     }
   }
