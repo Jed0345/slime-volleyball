@@ -419,19 +419,20 @@
   ];
   var oppIdx = 0;
 
-  var GRAV = 0.45;
-  var MOVE = 5.0;
-  var JUMP = 13.2;
+  var GRAV = 0.72;
+  var MOVE = 6.25;
+  var JUMP = 17.0;
   var SLIME_R = 40, BALL_R = 11;
   var NET_W = 6, NET_H = 56;
   var netX = W/2;
-  var BALL_GRAV = 0.32;
+  var BALL_GRAV = 0.24;
 
   // Height cap: the ball can't rise more than MAX_RISE px above its hit point.
-  // From kinematics: v_max = sqrt(2 * g * h).
-  var MAX_RISE = 230;
+  // From kinematics: v_max = sqrt(2 * g * h). Kept low so juggling the ball on
+  // your own side stays controlled instead of floating up near the ceiling.
+  var MAX_RISE = 175;
   var MAX_UP = Math.sqrt(2 * BALL_GRAV * MAX_RISE);
-  var MAX_SPEED = 13.5;
+  var MAX_SPEED = 10.5;
 
   var p1, p2, ball, scores, state, server, twoPlayer=false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
@@ -484,9 +485,12 @@
   }
   function curOpp(){ return OPPS[oppIdx]; }
 
-  function resetPositions(toServer){
+  function resetSlimes(){
     p1.x = W*0.25; p1.y = GROUND; p1.vx=0; p1.vy=0; p1.onGround=true;
     p2.x = W*0.75; p2.y = GROUND; p2.vx=0; p2.vy=0; p2.onGround=true;
+  }
+  function resetPositions(toServer){
+    resetSlimes();
     var sx = (toServer==='p1') ? W*0.25 : W*0.75;
     ball = {x:sx, y:GROUND-170, vx:0, vy:0, r:BALL_R, live:false};
   }
@@ -583,7 +587,10 @@
       setMsg(label, 'PRESS SPACE OR TAP');
     } else {
       state = 'point';
-      resetPositions(server);
+      // Leave the ball resting where it landed so players can see where the
+      // point ended; only the slimes return to ready. The ball is moved to
+      // the serve position later, in startPoint().
+      resetSlimes();
       setMsg(nameFor(who)+'<br>SCORES', 'PRESS SPACE OR TAP');
       // If the AI (player 2) is the new server in one-player mode,
       // serve automatically after a short pause since there is no human to press Space.
@@ -686,6 +693,9 @@
     ball.y += ball.vy;
     if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx); }
     if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx); }
+    // Ceiling: keep the ball on screen; bounce it back down with damping so a
+    // hard hit can't send it above the top of the court.
+    if(ball.y < ball.r){ ball.y = ball.r; ball.vy = Math.abs(ball.vy) * 0.6; }
     var netLeft = netX - NET_W/2, netRight = netX + NET_W/2, netTop = GROUND - NET_H;
     if(ball.x+ball.r > netLeft && ball.x-ball.r < netRight && ball.y+ball.r > netTop){
       if(ball.y < netTop && ball.vy>0){
