@@ -297,6 +297,26 @@
   }
   .swatch:hover{ border-color:#9aa3b8; }
   .swatch.selected{ border-color:#fff; transform:scale(1.18); }
+  /* Custom color picker shown as an eyedropper icon (light gray, white on hover);
+     the real color input sits invisibly on top to catch the click. */
+  .skin-eyedropper{
+    position:relative; display:inline-flex; align-items:center; justify-content:center;
+    width:26px; height:26px; cursor:pointer; color:#9aa3b8;
+    transition:color .15s;
+  }
+  .skin-eyedropper:hover{ color:#fff; }
+  .skin-eyedropper svg{ width:18px; height:18px; display:block; pointer-events:none; }
+  .skin-custom{
+    position:absolute; inset:0; width:100%; height:100%;
+    margin:0; padding:0; border:0; opacity:0; cursor:pointer;
+  }
+  .skin-boss{
+    font-family:system-ui, sans-serif; font-size:11px; color:#e8ecf4;
+    background:transparent; border:1px solid #3a4150; border-radius:8px;
+    padding:5px 9px; cursor:pointer; white-space:nowrap;
+  }
+  .skin-boss:hover{ background:#262c3b; }
+  .skin-boss.active{ border-color:#c040d0; color:#f0c8ff; }
 
   /* --- Film-grain noise overlay (always on, sits above filter) --- */
   #noise-overlay{
@@ -369,10 +389,20 @@
     <div class="skin-picker" id="skin-p1">
       <span class="skin-label blue">BLUE SKIN</span>
       <div class="swatches" data-side="p1"></div>
+      <label class="skin-eyedropper" title="Custom color" aria-label="Custom color">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
+        <input type="color" class="skin-custom" data-side="p1" />
+      </label>
+      <button class="skin-boss" type="button" data-side="p1">Boss: Off</button>
     </div>
     <div class="skin-picker" id="skin-p2" style="display:none;">
       <span class="skin-label pink">PINK SKIN</span>
       <div class="swatches" data-side="p2"></div>
+      <label class="skin-eyedropper" title="Custom color" aria-label="Custom color">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
+        <input type="color" class="skin-custom" data-side="p2" />
+      </label>
+      <button class="skin-boss" type="button" data-side="p2">Boss: Off</button>
     </div>
   </div>
 
@@ -503,29 +533,31 @@
   var BLUE = '#2f7fd6', BLUE_D = '#1c3f6e';
   var PINK = '#e8537f', PINK_D = '#7a1f3a';
 
-  // User-selectable slime skins. Order is the swatch order in the UI.
-  // Several match the AI bosses so you can play as them: red = Red Slimons,
-  // purple = Psycho Slime, white = White Slime, black = Slime Master, and the
-  // royal blue below = Big Blue Boss.
+  // Six color presets shown as swatches; a custom color picker sits beside them.
   var SKINS = [
-    '#2f7fd6', // blue (default p1)
-    '#e8537f', // pink (default p2)
+    '#2f7fd6', // blue
+    '#e8537f', // pink
     '#5dd663', // green
     '#f4b73e', // yellow
-    '#ff8c2a', // orange
-    '#d83a3a', // red — Red Slimons
-    '#c040d0', // purple — Psycho Slime
-    '#22c0c0', // teal
-    '#f3f3f3', // white — White Slime
-    '#222222', // black — Slime Master
-    '#2a55d6', // royal blue — Big Blue Boss
-    '#16a085', // sea green
-    '#8e44ad', // grape
-    '#e84393', // rose
-    '#34495e', // slate
-    '#e1b12c'  // gold
+    '#222222', // black
+    '#f3f3f3'  // white
   ];
-  var slimeSkins = { p1: BLUE, p2: PINK };
+  // Boss skins: cosmetic-only (color + optional effect). Cycled with the "Boss"
+  // button; selecting one overrides the chosen color. The flash flag gives the
+  // Psycho Slime skin the same strobing effect as the AI Psycho boss.
+  var BOSS_SKINS = [
+    { name:'White Slime',  color:'#f3f3f3' },
+    { name:'Red Slimons',  color:'#d83a3a' },
+    { name:'Slime Master', color:'#222222' },
+    { name:'Psycho Slime', color:'#c040d0', flash:true },
+    { name:'Big Blue Boss',color:'#2a55d6', rmul:1.55 } // big, like the AI boss
+  ];
+  function bossSkinByName(name){
+    for(var i=0;i<BOSS_SKINS.length;i++){ if(BOSS_SKINS[i].name === name) return BOSS_SKINS[i]; }
+    return null;
+  }
+  // Per side: a chosen color and an optional boss skin name ('' = none).
+  var slimeSkins = { p1: {color: BLUE, boss: ''}, p2: {color: PINK, boss: ''} };
   function skinDark(hex){ return darken(hex, 0.45); }
 
   // In online play, each side's scoreboard label shows the player's chosen
@@ -551,6 +583,7 @@
     return {x:0, y:GROUND, vx:0, vy:0, r:r, left:left,
             col: left?BLUE:(opp?opp.col:PINK),
             cold:left?BLUE_D:(opp?opp.cold:PINK_D),
+            flash: (!left && opp) ? !!opp.flash : false, // AI boss (Psycho) flashes
             onGround:true};
   }
   function curOpp(){ return OPPS[oppIdx]; }
@@ -580,13 +613,23 @@
     if(typeof updateSkinPickerVisibility === 'function') updateSkinPickerVisibility();
   }
 
-  // Apply the user-selected skin to the slime objects. In 1P, p2's color is
-  // owned by the AI opponent, so we don't override it.
+  // Resolve a side's chosen skin (color or boss) onto its slime object,
+  // including the shifting-colors flag for animated boss skins.
+  function applySkinToSlime(slime, side){
+    if(!slime) return;
+    var sk = slimeSkins[side];
+    var b = sk.boss ? bossSkinByName(sk.boss) : null;
+    var col = b ? b.color : sk.color;
+    slime.col = col;
+    slime.cold = skinDark(col);
+    slime.flash = b ? !!b.flash : false;
+    slime.r = SLIME_R * ((b && b.rmul) ? b.rmul : 1); // Big Blue Boss skin is larger
+  }
+  // Apply chosen skins to the controllable slimes. In 1P, p2 belongs to the AI
+  // opponent, so we don't override it.
   function applyLocalSkins(){
-    if(p1){ p1.col = slimeSkins.p1; p1.cold = skinDark(slimeSkins.p1); }
-    if(p2 && (twoPlayer || netMode)){
-      p2.col = slimeSkins.p2; p2.cold = skinDark(slimeSkins.p2);
-    }
+    applySkinToSlime(p1, 'p1');
+    if(twoPlayer || netMode) applySkinToSlime(p2, 'p2');
   }
 
   var DEFAULT_WIN = 6;
@@ -853,10 +896,11 @@
     return '#'+c(r)+c(g)+c(b);
   }
 
-  function drawSlime(s, isOppFlash){
+  function drawSlime(s){
     var col = s.col;
     var outline = darken(s.cold, 0.7);
-    if(isOppFlash){
+    if(s.flash){
+      // Psycho Slime effect: strobe the body between its color and yellow.
       var flashOn = (Math.floor(flashT/4)%2===0);
       col = flashOn ? s.col : '#ffe14d';
       outline = flashOn ? darken(s.cold, 0.7) : '#6e5a00';
@@ -968,8 +1012,8 @@
     ctx.fillStyle = NETCOL;
     ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H);
     flashT++;
-    drawSlime(p1, false);
-    drawSlime(p2, (!twoPlayer && curOpp().flash));
+    drawSlime(p1);
+    drawSlime(p2);
     ctx.fillStyle = '#ffd23f';
     ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = '#b8860b'; ctx.lineWidth=1.5;
@@ -1078,7 +1122,7 @@
     if(asHost) netSend({type:'config', win: WIN});
     // Tell the peer which color and username we picked for our slime.
     var mySide = asHost ? 'p1' : 'p2';
-    netSend({type:'skin', side: mySide, col: slimeSkins[mySide]});
+    netSend({type:'skin', side: mySide, color: slimeSkins[mySide].color, boss: slimeSkins[mySide].boss});
     netSend({type:'name', name: chatUsername});
     peerName = '';
     updateScoreboardNames();
@@ -1113,11 +1157,13 @@
     }
     if(m.type === 'chat'){ chatOnPeerMessage(m); return; }
 
-    if(m.type === 'skin' && (m.side === 'p1' || m.side === 'p2') && typeof m.col === 'string'){
-      // Remote peer picked a skin — apply to the slime they control.
-      slimeSkins[m.side] = m.col;
-      var slime = (m.side === 'p1') ? p1 : p2;
-      if(slime){ slime.col = m.col; slime.cold = skinDark(m.col); }
+    if(m.type === 'skin' && (m.side === 'p1' || m.side === 'p2')){
+      // Remote peer picked a skin (color or boss) — apply to the slime they control.
+      slimeSkins[m.side] = {
+        color: (typeof m.color === 'string') ? m.color : slimeSkins[m.side].color,
+        boss:  (typeof m.boss === 'string') ? m.boss : ''
+      };
+      applySkinToSlime((m.side === 'p1') ? p1 : p2, m.side);
       return;
     }
 
@@ -1917,36 +1963,71 @@
   // =================== END CHAT ===================
 
   // ===================== SKIN PICKER =====================
-  function selectSkin(side, col){
-    slimeSkins[side] = col;
+  // Apply a side's chosen skin to the slime it controls. In 1P only p1 is the
+  // player; p2 is the AI opponent and keeps its own look.
+  function applySkinToControlledSlime(side){
     var slime = (side === 'p1') ? p1 : p2;
-    // In 1P mode p2's color belongs to the AI opponent — don't override.
-    if(slime && (side === 'p1' || twoPlayer || netMode)){
-      slime.col = col; slime.cold = skinDark(col);
-    }
+    if(slime && (side === 'p1' || twoPlayer || netMode)) applySkinToSlime(slime, side);
+  }
+  function syncSkin(side){
+    if(netMode){ netSend({type:'skin', side:side, color:slimeSkins[side].color, boss:slimeSkins[side].boss}); }
+  }
+  // Pick a preset/custom color: clears any boss skin (color and boss are
+  // mutually exclusive — you're either a color or a boss).
+  function selectColor(side, col){
+    slimeSkins[side].color = col;
+    slimeSkins[side].boss = '';
+    applySkinToControlledSlime(side);
+    updateSkinControls(side);
+    syncSkin(side);
+  }
+  // Cycle the boss skin: Off -> each boss -> Off.
+  function cycleBoss(side){
+    var names = BOSS_SKINS.map(function(b){ return b.name; });
+    var idx = names.indexOf(slimeSkins[side].boss); // -1 when Off
+    idx = idx + 1;
+    slimeSkins[side].boss = (idx >= names.length) ? '' : names[idx];
+    applySkinToControlledSlime(side);
+    updateSkinControls(side);
+    syncSkin(side);
+  }
+  function updateSkinControls(side){
+    var sk = slimeSkins[side];
     var container = document.querySelector('.swatches[data-side="' + side + '"]');
     if(container){
-      var swatches = container.querySelectorAll('.swatch');
-      for(var i=0;i<swatches.length;i++){
-        swatches[i].classList.toggle('selected', swatches[i].dataset.col === col);
+      var sws = container.querySelectorAll('.swatch');
+      for(var i=0;i<sws.length;i++){
+        sws[i].classList.toggle('selected', !sk.boss && sws[i].dataset.col === sk.color);
       }
     }
-    if(netMode){ netSend({type:'skin', side:side, col:col}); }
+    var custom = document.querySelector('.skin-custom[data-side="' + side + '"]');
+    if(custom && !sk.boss && /^#[0-9a-fA-F]{6}$/.test(sk.color)){ custom.value = sk.color; }
+    var bossBtn = document.querySelector('.skin-boss[data-side="' + side + '"]');
+    if(bossBtn){
+      bossBtn.textContent = sk.boss ? ('Boss: ' + sk.boss) : 'Boss: Off';
+      bossBtn.classList.toggle('active', !!sk.boss);
+    }
   }
   function buildSwatches(){
     ['p1','p2'].forEach(function(side){
       var container = document.querySelector('.swatches[data-side="' + side + '"]');
-      if(!container) return;
-      container.innerHTML = '';
-      SKINS.forEach(function(col){
-        var btn = document.createElement('button');
-        btn.className = 'swatch' + (col === slimeSkins[side] ? ' selected' : '');
-        btn.style.background = col;
-        btn.dataset.col = col;
-        btn.title = col;
-        btn.addEventListener('click', function(){ selectSkin(side, col); });
-        container.appendChild(btn);
-      });
+      if(container){
+        container.innerHTML = '';
+        SKINS.forEach(function(col){
+          var btn = document.createElement('button');
+          btn.className = 'swatch';
+          btn.style.background = col;
+          btn.dataset.col = col;
+          btn.title = col;
+          btn.addEventListener('click', function(){ selectColor(side, col); });
+          container.appendChild(btn);
+        });
+      }
+      var custom = document.querySelector('.skin-custom[data-side="' + side + '"]');
+      if(custom){ custom.addEventListener('input', function(){ selectColor(side, custom.value); }); }
+      var bossBtn = document.querySelector('.skin-boss[data-side="' + side + '"]');
+      if(bossBtn){ bossBtn.addEventListener('click', function(){ cycleBoss(side); }); }
+      updateSkinControls(side);
     });
   }
   function updateSkinPickerVisibility(){
