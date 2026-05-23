@@ -43,6 +43,10 @@
   #sv-board .side{ display:flex; flex-direction:row; align-items:center; gap:14px; flex-wrap:wrap; }
   #sv-board .side.left{ justify-content:flex-end; flex-wrap:wrap-reverse; }
   #sv-board .side.right{ justify-content:flex-start; }
+  /* Online guest: mirror the view so this player sees their own slime on the
+     left. Reversing the board (text stays upright) keeps the scoreboard
+     consistent with the flipped court. */
+  #sv-board.mirror{ flex-direction:row-reverse; }
   #sv-board .namescore{ display:flex; flex-direction:row; align-items:center; gap:10px; }
   #sv-board .vs{ font-size:12px; color:#cfd6e4; padding:0 12px; white-space:nowrap;
     text-shadow:2px 2px 0 rgba(0,0,0,0.45); }
@@ -101,6 +105,12 @@
 
   #stage{ position:relative; width:100%; max-width:750px; }
   #game{ width:100%; display:block; border-radius:12px; }
+  /* Online guest: horizontally mirror the court canvas so this player sees
+     their own slime on the left. Only the canvas flips — the HUD overlays
+     (score, messages, ping) stay upright/readable. The simulation is identical
+     on both peers; the guest's left/right input is swapped to match (see
+     sampleLocalInput), so controls stay intuitive. */
+  #stage.mirror #game, #stage.mirror #pixi-canvas{ transform:scaleX(-1); }
   #msg{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     flex-direction:column; gap:12px; text-align:center; pointer-events:none;
@@ -534,7 +544,7 @@
     </div>
   </div>
 
-  <footer id="version">Slime Volleyball v1.3.0</footer>
+  <footer id="version">Slime Volleyball v1.4.0</footer>
 
 <script>
 (function(){
@@ -1215,6 +1225,66 @@
 
   function netSend(obj){ if(ws && ws.readyState === WebSocket.OPEN){ ws.send(JSON.stringify(obj)); } }
 
+  // ===================== WEBRTC TRANSPORT =====================
+  // Gameplay inputs travel over a direct peer-to-peer WebRTC DataChannel when we
+  // can establish one (lower latency than the relay, and no TCP head-of-line
+  // blocking). The existing WebSocket carries the one-time handshake (offer /
+  // answer / ICE) and remains the fallback transport: if the channel never opens
+  // (restrictive NAT, old browser), inputs just keep flowing over the relay, so
+  // online play always works. The host is the offerer, the guest the answerer.
+  var pc = null, dc = null, pendingIce = [];
+  var RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  function noop(){}
+  function rtcSupported(){ return typeof RTCPeerConnection !== 'undefined'; }
+  function rtcConnected(){ return dc && dc.readyState === 'open'; }
+  // ICE candidates can arrive before setRemoteDescription resolves; addIceCandidate
+  // rejects then, so queue early candidates and flush once the description is set.
+  function rtcAddIce(cand){
+    if(pc && pc.remoteDescription && pc.remoteDescription.type){ pc.addIceCandidate(cand).catch(noop); }
+    else { pendingIce.push(cand); }
+  }
+  function rtcFlushIce(){ var q = pendingIce; pendingIce = []; for(var i=0;i<q.length;i++){ if(pc) pc.addIceCandidate(q[i]).catch(noop); } }
+  // Prefer the direct channel; fall back to the relay when it isn't open yet.
+  function rtcSend(obj){
+    if(rtcConnected()){ try{ dc.send(JSON.stringify(obj)); return; }catch(e){} }
+    netSend(obj);
+  }
+  function rtcBindChannel(ch){
+    dc = ch;
+    ch.onopen = function(){ if(typeof updatePingUI === 'function') updatePingUI(); };
+    ch.onclose = noop;
+    ch.onmessage = function(ev){ var m; try{ m = JSON.parse(ev.data); }catch(e){ return; } handleNetMessage(m); };
+  }
+  function rtcStart(isOfferer){
+    rtcCleanup();
+    pendingIce = [];
+    if(!rtcSupported()) return; // unsupported browser: stay on the relay
+    try{ pc = new RTCPeerConnection(RTC_CONFIG); }catch(e){ pc = null; return; }
+    pc.onicecandidate = function(e){ if(e.candidate) netSend({type:'rtc-ice', cand: e.candidate}); };
+    if(isOfferer){
+      // Unreliable + unordered = UDP-like. Lost/reordered input packets are fine:
+      // rollback predicts missing frames and the redundant window backfills them.
+      rtcBindChannel(pc.createDataChannel('game', { ordered:false, maxRetransmits:0 }));
+      pc.createOffer().then(function(o){ return pc.setLocalDescription(o); })
+        .then(function(){ netSend({type:'rtc-offer', sdp: pc.localDescription}); }).catch(noop);
+    } else {
+      pc.ondatachannel = function(e){ rtcBindChannel(e.channel); };
+    }
+  }
+  function rtcOnOffer(sdp){
+    rtcStart(false);
+    if(!pc) return;
+    pc.setRemoteDescription(sdp)
+      .then(function(){ rtcFlushIce(); return pc.createAnswer(); })
+      .then(function(a){ return pc.setLocalDescription(a); })
+      .then(function(){ netSend({type:'rtc-answer', sdp: pc.localDescription}); }).catch(noop);
+  }
+  function rtcCleanup(){
+    if(dc){ try{ dc.close(); }catch(e){} dc = null; }
+    if(pc){ try{ pc.close(); }catch(e){} pc = null; }
+  }
+  // =================== END WEBRTC TRANSPORT ===================
+
   // ---- Ping: each side measures its own round-trip to the relay (server echoes
   // 'ping' as 'pong'), then relays that number to the peer so both players can
   // see each other's latency. The ball compensation also reads these values.
@@ -1272,6 +1342,7 @@
     netSend({type:'leave'});
     stopPing();
     rb = null;
+    rtcCleanup();
     clearRoom();
     location.reload();
   }
@@ -1288,14 +1359,22 @@
                           // reaches the peer before they need it (fewer rollbacks)
   var MAX_ROLLBACK = 10;  // never predict more than this many frames past the last
                           // confirmed remote input — stall instead, to bound replay
+  var INPUT_REDUNDANCY = 8; // resend this many recent frames in every packet, so a
+                            // dropped packet on the unreliable channel is backfilled
+                            // by the next one (rollback can't fix an input that never
+                            // arrives). Inputs are 1 byte each, so this stays tiny.
 
   var NOINPUT = {left:false, right:false, jump:false};
   function sampleLocalInput(){
-    return {
-      left:  !!(keys['a']||keys['A']||keys['ArrowLeft']),
-      right: !!(keys['d']||keys['D']||keys['ArrowRight']),
-      jump:  !!(keys['w']||keys['W']||keys['ArrowUp']||keys[' '])
-    };
+    var left  = !!(keys['a']||keys['A']||keys['ArrowLeft']);
+    var right = !!(keys['d']||keys['D']||keys['ArrowRight']);
+    var jump  = !!(keys['w']||keys['W']||keys['ArrowUp']||keys[' ']);
+    // The guest's view is mirrored (they see themselves on the left), so swap
+    // horizontal input: pressing "right" should move their slime toward the net
+    // on screen. The sent input is already in simulation space, so both peers
+    // stay in lockstep.
+    if(netMode === 'guest'){ var t = left; left = right; right = t; }
+    return {left:left, right:right, jump:jump};
   }
   function inputsEqual(a, b){ return a.left===b.left && a.right===b.right && a.jump===b.jump; }
 
@@ -1364,11 +1443,17 @@
   function rbTick(){
     if(!rb || netPaused) return;
     var applyF = rb.frame + INPUT_DELAY;
-    if(rb.local[applyF] === undefined){ // lock & send each frame's input exactly once
-      var inp = sampleLocalInput();
-      rb.local[applyF] = inp;
-      netSend({type:'in', f:applyF, l:inp.left?1:0, r:inp.right?1:0, j:inp.jump?1:0});
+    if(rb.local[applyF] === undefined){ rb.local[applyF] = sampleLocalInput(); } // lock this frame's input once
+    // Send the newest frame plus a redundant window of recent ones, packed one
+    // byte per frame (bit0 left, bit1 right, bit2 jump). Sent every tick so the
+    // unreliable channel self-heals dropped packets; the WS fallback dedupes by
+    // frame, so resends are harmless.
+    var hist = [];
+    for(var hf = applyF - INPUT_REDUNDANCY + 1; hf <= applyF; hf++){
+      var li = (hf >= 0 && rb.local[hf]) ? rb.local[hf] : NOINPUT;
+      hist.push((li.left?1:0) | (li.right?2:0) | (li.jump?4:0));
     }
+    rtcSend({type:'in', f:applyF, n:hist});
     if(rb.frame - rb.lastRemoteFrame > MAX_ROLLBACK){ rb.stalled = true; return; }
     rb.stalled = false;
     simReplaying = true;
@@ -1379,19 +1464,28 @@
       for(var k in rb.saved){ if((k|0) < cutoff){ delete rb.saved[k]; delete rb.used[k]; delete rb.local[k]; delete rb.remote[k]; } }
     }
   }
-  // A peer input arrived. Store it; if it contradicts a prediction we already
-  // simulated, roll back to that frame and replay forward to where we were.
+  // A peer input packet arrived (a redundant window of frames). Store any frames
+  // we don't already have; if any newly-confirmed frame contradicts a prediction
+  // we already simulated, roll back ONCE to the earliest such frame and replay
+  // forward to the present. Order/duplicates don't matter — frames are keyed.
   function rbOnRemoteInput(m){
-    if(!rb) return;
-    var f = m.f|0;
-    if(rb.remote[f]) return; // already known (TCP shouldn't duplicate)
-    var inp = {left:!!m.l, right:!!m.r, jump:!!m.j};
-    rb.remote[f] = inp;
-    if(f > rb.lastRemoteFrame){ rb.lastRemoteFrame = f; rb.lastRemoteInput = inp; }
-    if(f < rb.frame && rb.used[f] && rb.saved[f] && !inputsEqual(rb.used[f], inp)){
+    if(!rb || !m.n) return;
+    var end = m.f|0, arr = m.n, earliest = -1;
+    for(var i=0; i<arr.length; i++){
+      var fr = end - (arr.length - 1) + i;
+      if(fr < 0 || rb.remote[fr]) continue; // out of range or already confirmed
+      var bits = arr[i]|0;
+      var inp = {left:!!(bits&1), right:!!(bits&2), jump:!!(bits&4)};
+      rb.remote[fr] = inp;
+      if(fr > rb.lastRemoteFrame){ rb.lastRemoteFrame = fr; rb.lastRemoteInput = inp; }
+      if(fr < rb.frame && rb.used[fr] && rb.saved[fr] && !inputsEqual(rb.used[fr], inp)){
+        if(earliest < 0 || fr < earliest) earliest = fr;
+      }
+    }
+    if(earliest >= 0){
       var target = rb.frame;
-      setGameState(rb.saved[f]);
-      rb.frame = f;
+      setGameState(rb.saved[earliest]);
+      rb.frame = earliest;
       simReplaying = true;
       while(rb.frame < target){ rbSimOne(); }
       simReplaying = false;
@@ -1460,6 +1554,10 @@
     document.getElementById('controlhint').innerHTML =
       asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
              : 'You are <b>PINK</b> &middot; Move/jump: <b>A / W / D</b> or arrows';
+    // Mirror the court + scoreboard for the guest so each player sees their own
+    // slime on the left (the host already is on the left).
+    document.getElementById('stage').classList.toggle('mirror', !asHost);
+    document.getElementById('sv-board').classList.toggle('mirror', !asHost);
     document.getElementById('lobby').style.display = 'none';
     updateSkinPickerVisibility();
     // Host tells the guest the target score so both show matching dots.
@@ -1478,12 +1576,25 @@
     presentNet();
     chatSetConnected(true);
     startPing(); // latency probe drives the on-screen ping indicator
+    // Upgrade to a direct peer-to-peer channel: the host offers, the guest
+    // answers when the offer arrives. Inputs flow over the relay until it opens.
+    if(asHost) rtcStart(true);
   }
 
+  // WebSocket messages: handle WebRTC signaling here (it only ever arrives over
+  // the relay), then defer everything else to the shared dispatcher.
   function netOnMessage(ev){
     var m;
     try{ m = JSON.parse(ev.data); }catch(e){ return; }
+    if(m.type === 'rtc-offer'){ rtcOnOffer(m.sdp); return; }
+    if(m.type === 'rtc-answer'){ if(pc) pc.setRemoteDescription(m.sdp).then(rtcFlushIce).catch(noop); return; }
+    if(m.type === 'rtc-ice'){ if(m.cand) rtcAddIce(m.cand); return; }
+    handleNetMessage(m);
+  }
 
+  // Shared dispatcher: messages arrive here from the WebSocket relay OR the
+  // WebRTC DataChannel (gameplay inputs), so both transports are handled identically.
+  function handleNetMessage(m){
     // Latency: our probe came back — update our ping and tell the peer.
     if(m.type === 'pong'){
       var rtt = nowMs() - m.t;
@@ -1505,6 +1616,7 @@
       clearRoom();
       netMode = null;
       rb = null;
+      rtcCleanup();
       stopPing();
       updatePingUI();
       lobbyStatus('That room is no longer available.');
@@ -1528,6 +1640,9 @@
       netSend({type:'resync', a: scores.p1, b: scores.p2, sv: server});
       _presSt = ''; _presSv = '';
       rbResync(scores.p1, scores.p2, server);
+      // Re-establish the P2P channel (the old one died with the disconnect). The
+      // host re-offers; the guest answers when the new offer arrives.
+      if(netMode === 'host') rtcStart(true);
       return;
     }
     if(m.type === 'peer-left'){
@@ -1536,6 +1651,7 @@
       state = 'gameover';
       netMode = null;
       rb = null;
+      rtcCleanup();
       netPaused = false;
       clearRoom();
       hideRematch();
