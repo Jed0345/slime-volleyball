@@ -80,21 +80,33 @@ function scorePoint(who){ // pure (the simReplaying=true branch)
   if(scores[who] >= WIN) state = 'gameover';
   else { state = 'point'; resetSlimes(); }
 }
+function collideNet(){
+  var nl = netX - NET_W/2, nr = netX + NET_W/2, ntop = GROUND - NET_H, r = ball.r;
+  if(ball.x > nl && ball.x < nr && ball.y > ntop){
+    var toUp = ball.y - (ntop - r), toLeft = ball.x - (nl - r), toRight = (nr + r) - ball.x;
+    if(toUp <= toLeft && toUp <= toRight){ ball.y = ntop - r; if(ball.vy > 0) ball.vy = -Math.abs(ball.vy)*0.8; }
+    else if(toLeft <= toRight){ ball.x = nl - r; if(ball.vx > 0) ball.vx = -Math.abs(ball.vx); }
+    else { ball.x = nr + r; if(ball.vx < 0) ball.vx = Math.abs(ball.vx); }
+    return;
+  }
+  var qx = Math.max(nl, Math.min(ball.x, nr)), qy = Math.max(ntop, Math.min(ball.y, GROUND));
+  var dx = ball.x - qx, dy = ball.y - qy, d2 = dx*dx + dy*dy;
+  if(d2 >= r*r || d2 === 0) return;
+  var d = Math.sqrt(d2), nx = dx/d, ny = dy/d;
+  ball.x = qx + nx*r; ball.y = qy + ny*r;
+  var vn = ball.vx*nx + ball.vy*ny;
+  if(vn < 0){ ball.vx -= 2*vn*nx; ball.vy -= 2*vn*ny; if(ny < -0.5) ball.vy *= 0.8; }
+}
 function updateBall(){
   if(!ball.live) return;
   ball.vy += BALL_GRAV;
   var steps = Math.max(1, Math.ceil(Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy) / (ball.r * 0.5)));
   var stepX = ball.vx / steps, stepY = ball.vy / steps;
-  var netLeft = netX - NET_W/2, netRight = netX + NET_W/2, netTop = GROUND - NET_H;
   for(var i=0; i<steps; i++){
     ball.x += stepX; ball.y += stepY;
     if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx)*WALL_BOUNCE; }
     if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx)*WALL_BOUNCE; }
-    if(ball.x+ball.r > netLeft && ball.x-ball.r < netRight && ball.y+ball.r > netTop){
-      if(ball.y < netTop && ball.vy>0){ ball.vy = -Math.abs(ball.vy)*0.8; ball.y = netTop - ball.r; }
-      else { if(ball.x < netX){ ball.x = netLeft - ball.r; ball.vx = -Math.abs(ball.vx); } else { ball.x = netRight + ball.r; ball.vx = Math.abs(ball.vx); } }
-    }
-    collideSlime(p1); collideSlime(p2);
+    collideSlime(p1); collideSlime(p2); collideNet();
     if(ball.y >= GROUND - ball.r){
       ball.y = GROUND - ball.r; ball.live = false;
       if(ball.x < netX) scorePoint('p2'); else scorePoint('p1');
@@ -205,11 +217,50 @@ function testB(seed, N){
 }
 var delayB = 3;
 
+// ---- Test C: net squeeze — both slimes jammed against the net, ball fired into
+// the corner from every angle. The ball must never end up stuck INSIDE the net
+// after a step, never go NaN, and never tunnel to the far side while slow. ----
+function netRectIntrusion(){ // how far the ball center is inside the net rect (0 = outside)
+  var nl=netX-NET_W/2, nr=netX+NET_W/2, ntop=GROUND-NET_H;
+  if(ball.x>nl && ball.x<nr && ball.y>ntop) return Math.min(ball.x-nl, nr-ball.x, ball.y-ntop);
+  return 0;
+}
+function testNetSqueeze(){
+  var r = rng(424242), worstIntrusion = 0, bad = false;
+  for(var trial=0; trial<2000; trial++){
+    newMatch();
+    state='play'; ball.live=true;
+    // jam both slimes hard against the net
+    p1.x = netX - NET_W/2 - p1.r; p1.y = GROUND; p1.onGround=true;
+    p2.x = netX + NET_W/2 + p2.r; p2.y = GROUND; p2.onGround=true;
+    // drop the ball somewhere in the net corner region with a random velocity
+    ball.x = netX + (r()*2-1)*60;
+    ball.y = (GROUND-NET_H) + r()*NET_H;
+    ball.vx = (r()*2-1)*MAX_VX; ball.vy = (r()*2-1)*MAX_VX;
+    // slimes keep pressing toward the net while the ball bounces around
+    for(var f=0; f<40 && state==='play'; f++){
+      moveSlime(p1, false, true, false, MOVE);   // p1 pushes right into the net
+      moveSlime(p2, true, false, false, MOVE);   // p2 pushes left into the net
+      updateBall();
+      if(!isFinite(ball.x) || !isFinite(ball.y) || !isFinite(ball.vx) || !isFinite(ball.vy)){ bad=true; break; }
+      var sp = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+      if(sp > MAX_SPEED + 1){ bad=true; break; } // bounce must not amplify speed past the cap
+      var intr = netRectIntrusion();
+      if(intr > worstIntrusion) worstIntrusion = intr;
+      if(intr > 1.0){ bad=true; break; } // ball left lodged inside the net
+    }
+    if(bad) break;
+  }
+  console.log("Test C net-squeeze: 2000 trials x 40 frames — worst intrusion into net: " + worstIntrusion.toFixed(3) + "px " + (bad ? "(FAIL)" : "(ok, ~0)"));
+  return !bad;
+}
+
 var pass = true;
 for(var s=1; s<=50; s++){
   if(!testA(s*7+1, 400)){ console.log("FAIL test A (save/restore/replay) seed", s); pass=false; break; }
   if(!testB(s*13+5, 400)){ console.log("FAIL test B (predict+rollback) seed", s); pass=false; break; }
 }
+if(pass && !testNetSqueeze()){ pass = false; }
 if(pass){
   // show a sample final state so we can see points were actually scored
   console.log("PASS: 50 seeds x 400 frames — rollback replay is bit-identical to continuous + perfect-info sim");

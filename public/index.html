@@ -34,20 +34,23 @@
   }
 
   #sv-board{
-    display:flex; align-items:center; justify-content:center;
-    background:#3b4252; border:3px solid #2a2f3a; border-radius:8px;
-    padding:10px 16px; width:max-content; max-width:100%;
+    position:absolute; top:0; left:10px; right:10px; z-index:3;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    background:rgba(59,66,82,0); border-radius:8px;
+    padding:10px 16px;
     font-family:'PixelBold', monospace;
-    box-shadow:0 3px 0 #20242e;
+    transform:scale(1); transform-origin:top center; /* whole board scaled, pinned top-center */
   }
-  #sv-board .side{ display:flex; flex-direction:row; align-items:center; gap:14px; flex-wrap:wrap; }
-  #sv-board .side.left{ justify-content:flex-end; flex-wrap:wrap-reverse; }
-  #sv-board .side.right{ justify-content:flex-start; }
-  /* Online guest: mirror the view so this player sees their own slime on the
-     left. Reversing the board (text stays upright) keeps the scoreboard
-     consistent with the flipped court. */
-  #sv-board.mirror{ flex-direction:row-reverse; }
-  #sv-board .namescore{ display:flex; flex-direction:row; align-items:center; gap:10px; }
+  /* One row split into two equal halves. Each half holds the player's NAME on the
+     outer edge and their circles + score (grouped) toward the centre, with
+     "- VS -" dead-centred between the halves no matter how long the names are. */
+  #sv-board .score-row{ display:flex; align-items:center; align-self:stretch; gap:10px; }
+  #sv-board .namescore{ flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #sv-board .scoregroup{ display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+  #sv-board .lbl{ white-space:nowrap; }
+  /* Online guest: reverse the row AND each half so this player sits on the left
+     with their name still on the outer edge, matching the flipped court. */
+  #sv-board.mirror .score-row, #sv-board.mirror .namescore{ flex-direction:row-reverse; }
   #sv-board .vs{ font-size:12px; color:#cfd6e4; padding:0 12px; white-space:nowrap;
     text-shadow:2px 2px 0 rgba(0,0,0,0.45); }
   #sv-board .lbl{ font-size:11px; color:#fff; letter-spacing:1px; text-shadow:2px 2px 0 rgba(0,0,0,0.45); }
@@ -69,22 +72,32 @@
   #sv-board .dotrow.left{ justify-content:flex-end; }
   #sv-board .dotrow.right{ justify-content:flex-start; }
   #sv-board .dot{
-    width:11px; height:11px; border-radius:50%; flex:0 0 auto;
+    width:14px; height:14px; border-radius:50%; flex:0 0 auto;
     border:2px solid #cfd6e4; background:transparent;
     transition:background .15s, transform .15s;
   }
   #sv-board .dot.blue{ border-color:#bfe0ff; }
   #sv-board .dot.pink{ border-color:#ffc8dd; }
-  #sv-board .dot.blue.on{ background:#2f7fd6; transform:scale(1.15); }
-  #sv-board .dot.pink.on{ background:#e8537f; transform:scale(1.15); }
+  #sv-board .dot.blue.on{ background:#fff; }   /* white fill (the sky behind is blue) */
+  #sv-board .dot.pink.on{ background:#e8537f; }
   #sv-firstto{
-    position:absolute; top:12px; left:50%; transform:translateX(-50%);
-    margin:0; z-index:2; pointer-events:none;
-    font-family:'PixelBold', monospace; font-size:10px; letter-spacing:1px;
-    color:#fff; text-align:center;
-    background:rgba(27,32,48,0.55); border:2px solid rgba(255,255,255,0.25);
-    border-radius:6px; padding:6px 12px;
-    text-shadow:2px 2px 0 rgba(0,0,0,0.4);
+    margin:0; font-family:'PixelBold', monospace; font-size:10px; letter-spacing:1px;
+    color:#9fb3d1; white-space:nowrap;
+  }
+
+  /* Music toggle, pinned to the bottom-right of the screen. */
+  /* Music toggle — an inline control button alongside Online / Reset / etc. */
+  #musicbtn{
+    position:relative; padding:6px 10px; cursor:pointer; color:#e8ecf4;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:transparent; border:1px solid #3a4150; border-radius:8px;
+  }
+  #musicbtn svg{ width:18px; height:18px; display:block; }
+  #musicbtn:hover{ background:#262c3b; }
+  #musicbtn.music-off{ color:#8a93a6; }              /* dimmed when muted */
+  #musicbtn.music-off::after{                         /* diagonal slash when muted */
+    content:''; position:absolute; left:8px; right:8px; top:50%; height:2px;
+    background:#e8537f; transform:rotate(-45deg); border-radius:2px;
   }
 
   /* Latency indicator, top-left of the court (online only). */
@@ -104,6 +117,8 @@
   #pingbox .ping-val.bad{  color:#e8537f; }
 
   #stage{ position:relative; width:100%; max-width:750px; }
+  /* Positioning context for the court overlays (msg, rematch, ping, pixi). */
+  #court{ position:relative; width:100%; }
   #game{ width:100%; display:block; border-radius:12px; }
   /* Online guest: horizontally mirror the court canvas so this player sees
      their own slime on the left. Only the canvas flips — the HUD overlays
@@ -163,15 +178,10 @@
       position:fixed; left:0; right:0; bottom:0;
       max-width:none; width:100%;
       padding:10px 12px;
-      background:rgba(20,24,40,0.85);
-      backdrop-filter:blur(6px);
-      -webkit-backdrop-filter:blur(6px);
-      box-shadow:0 -3px 12px rgba(0,0,0,0.4);
       z-index:50;
     }
     /* Reserve scroll space so the chat/controls aren't permanently hidden
-       behind the fixed touchpad. Joystick layout is much taller than arrows. */
-    body.touch-arrows{ padding-bottom:90px; }
+       behind the fixed touchpad. */
     body.touch-joystick{ padding-bottom:175px; }
   }
 
@@ -189,16 +199,33 @@
   button:hover{ background:#262c3b; }
   button:active{ transform:scale(0.97); }
 
-  #touchpad{ display:none; width:100%; max-width:750px; }
+  #touchpad{ display:none; width:100%; max-width:750px; position:relative; }
   #touchpad.show{ display:flex; }
-  #touchpad-arrows{ display:none; gap:8px; width:100%; }
-  #touchpad-arrows button{ flex:1; padding:14px 0; font-size:20px; }
   #touchpad-joystick{
-    display:none; width:100%; align-items:center; justify-content:space-between;
+    display:flex; width:100%; align-items:flex-end; justify-content:space-between;
     gap:12px; user-select:none; -webkit-user-select:none;
   }
-  #touchpad.layout-arrows #touchpad-arrows{ display:flex; }
-  #touchpad.layout-joystick #touchpad-joystick{ display:flex; }
+  /* Mode "stick" (1): a single joystick — push up to jump, no jump button; the
+     corner arrow docks it left/right. Mode "button" (2): joystick + dedicated
+     JUMP button on opposite sides (the default space-between layout above). */
+  #touchpad.mode-stick #joystick-jump{ display:none; }
+  #touchpad.mode-stick #touchpad-joystick{ justify-content:flex-start; }
+  #touchpad.mode-stick.joy-right #touchpad-joystick{ justify-content:flex-end; }
+  /* Corner left/right arrow — only shown in stick mode. */
+  #joyflip{
+    display:none; position:absolute; top:6px; right:14px; z-index:1;
+    width:40px; height:40px; padding:0; line-height:1; font-size:22px;
+    align-items:center; justify-content:center;
+    border-radius:50%; background:rgba(20,24,40,0.6); border:1px solid #3a4150; color:#e8ecf4;
+  }
+  #touchpad.mode-stick #joyflip{ display:flex; }
+  #touchpad.mode-stick.joy-right #joyflip{ right:auto; left:14px; }
+  /* Mode switch button, centered along the bottom of the screen. */
+  #joymode{
+    position:absolute; left:50%; bottom:8px; transform:translateX(-50%); z-index:1;
+    padding:5px 10px; font-size:11px; border-radius:8px; white-space:nowrap;
+    background:rgba(20,24,40,0.6); border:1px solid #3a4150; color:#e8ecf4;
+  }
   #joystick-base{
     position:relative; width:130px; height:130px; border-radius:50%;
     background:rgba(0,0,0,0.25); border:2px solid #3a4150;
@@ -313,11 +340,23 @@
     padding:12px;
   }
   #skins-header{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
     font-family:'PixelBold', monospace; font-size:11px; letter-spacing:1px;
     color:#cfd6e4;
     padding-bottom:8px;
     border-bottom:1px solid var(--border);
   }
+  #skins-toggle{
+    background:transparent; border:1px solid #3a4150; border-radius:6px;
+    padding:4px 10px; color:#e8ecf4; font-size:12px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  #skins-toggle:hover{ background:#262c3b; }
+  #skins-toggle-icon{ display:inline-block; transition:transform .15s; }
+  #skinpickers.collapsed{ gap:0; }
+  #skinpickers.collapsed #skins-toggle-icon{ transform:rotate(-90deg); }
+  #skinpickers.collapsed #skins-header{ padding-bottom:0; border-bottom:none; }
+  #skinpickers.collapsed #skin-grid{ display:none; }
   #skin-grid{ display:flex; gap:22px; align-items:flex-start; }
   .skin-col{ display:flex; flex-direction:column; gap:10px; min-width:0; }
   #skin-col-players{ flex:1.4; border-right:1px solid var(--border); padding-right:10px; }
@@ -328,6 +367,20 @@
     #skin-grid{ flex-direction:column; }
     /* stacked on mobile: divider becomes horizontal */
     #skin-col-players{ border-right:none; padding-right:0; border-bottom:1px solid var(--border); padding-bottom:10px; }
+    /* Scoreboard on mobile: drop the overlay and sit it in normal flow above the
+       court. Make it COMPACT and centered instead of spreading names to the
+       screen edges — each name sits next to its score group, dots shrink and the
+       row wraps so it never overflows a narrow screen (or a high win target). */
+    #sv-board{
+      position:relative; top:auto; left:auto; right:auto; z-index:auto;
+      margin-bottom:6px; padding:6px 8px; max-width:100%;
+    }
+    #sv-board .score-row{ align-self:auto; flex-wrap:wrap; justify-content:center; gap:6px 16px; }
+    #sv-board .namescore{ flex:0 1 auto; justify-content:center; gap:6px; }
+    #sv-board .scoregroup{ gap:6px; }
+    #sv-board .dotrow{ display:none; } /* hide the point circles on mobile — just names + scores */
+    #sv-board .numbox{ font-size:15px; min-width:34px; padding:5px 5px 4px; }
+    #sv-board .lbl{ font-size:10px; }
   }
   .skin-picker{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .skin-picker.dimmed{ opacity:0.2; pointer-events:none; }
@@ -389,29 +442,32 @@
 </head>
 <body>
 
-  <div id="sv-board">
-    <span class="side left">
-      <span class="dotrow left" id="dots-p1"></span>
-      <div class="namescore">
-        <span class="lbl blue" id="p1name">BLUE SLIME</span>
-        <span class="numbox blue" id="p1score">00</span>
-      </div>
-    </span>
-    <span class="vs">-&nbsp;VS&nbsp;-</span>
-    <span class="side right">
-      <div class="namescore">
-        <span class="numbox pink" id="p2score">00</span>
-        <span class="lbl pink" id="p2name">WHITE SLIME</span>
-      </div>
-      <span class="dotrow right" id="dots-p2"></span>
-    </span>
-  </div>
-
   <div id="stage" data-filter="off">
+    <div id="sv-board">
+      <div class="score-row">
+        <div class="namescore">
+          <span class="lbl blue" id="p1name">BLUE SLIME</span>
+          <span class="scoregroup">
+            <span class="dotrow left" id="dots-p1"></span>
+            <span class="numbox blue" id="p1score">00</span>
+          </span>
+        </div>
+        <div class="namescore">
+          <span class="scoregroup">
+            <span class="numbox pink" id="p2score">00</span>
+            <span class="dotrow right" id="dots-p2"></span>
+          </span>
+          <span class="lbl pink" id="p2name">WHITE SLIME</span>
+        </div>
+      </div>
+    </div>
+    <!-- The court: canvas + its overlays. position:relative so #msg / #rematch /
+         pingbox / pixi-canvas anchor to the court itself, not the whole #stage
+         (which also holds the scoreboard, in-flow above the court on mobile). -->
+    <div id="court">
     <canvas id="game" width="750" height="375"></canvas>
     <canvas id="pixi-canvas" width="750" height="375"></canvas>
     <div id="noise-overlay"></div>
-    <p id="sv-firstto">FIRST TO 6</p>
     <div id="pingbox">
       <span class="ping-row"><span class="ping-who">YOU</span><span id="ping-you" class="ping-val">--</span></span>
       <span class="ping-row"><span class="ping-who">OPP</span><span id="ping-opp" class="ping-val">--</span></span>
@@ -428,22 +484,34 @@
         <button id="rematch-no" type="button">No</button>
       </div>
     </div>
+    </div><!-- /#court -->
   </div>
 
   <div id="controls">
     <div id="controlhint"></div>
     <div id="btns">
       <button id="onlinebtn">Online</button>
+      <button id="winmodebtn" style="display:none;">Mode: First to 6</button>
       <button id="modebtn">Mode: 1 Player</button>
       <button id="oppbtn">Opponent: White Slime</button>
-      <button id="touchctrlbtn" style="display:none;">Touch: Arrows</button>
       <button id="resetbtn">Reset</button>
       <button id="leavebtn" style="display:none;">Leave Room</button>
+      <button id="musicbtn" type="button" class="music-off" aria-label="Toggle music" title="Music">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+      </button>
     </div>
   </div>
 
   <div id="skinpickers">
-    <div id="skins-header">SKINS</div>
+    <div id="skins-header">
+      <span>SKINS</span>
+      <button id="skins-toggle" type="button" aria-expanded="true" aria-controls="skinpickers">
+        <span id="skins-toggle-label">Hide skins</span>
+        <span id="skins-toggle-icon">&#9662;</span>
+      </button>
+    </div>
     <div id="skin-grid">
     <div class="skin-col" id="skin-col-players">
     <div class="skin-picker" id="skin-p1">
@@ -473,6 +541,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>
         <input type="color" class="skin-custom" data-side="ball" />
       </label>
+      <button class="skin-boss" type="button" data-side="ball">Ball: Off</button>
     </div>
       <div id="theme-filter-row">
         <button id="themebtn">Theme: Grassy</button>
@@ -530,12 +599,9 @@
     <div id="chat-emoji-picker" aria-hidden="true"></div>
   </div>
 
-  <div id="touchpad" class="layout-arrows">
-    <div id="touchpad-arrows">
-      <button id="tleft" aria-label="Move left">&#8592;</button>
-      <button id="tjump" aria-label="Jump">&#8593;</button>
-      <button id="tright" aria-label="Move right">&#8594;</button>
-    </div>
+  <div id="touchpad">
+    <button id="joyflip" type="button" aria-label="Switch joystick side">&#8594;</button>
+    <button id="joymode" type="button" aria-label="Switch joystick mode">Jump: Button</button>
     <div id="touchpad-joystick">
       <div id="joystick-base" aria-label="Joystick">
         <div id="joystick-knob"></div>
@@ -544,7 +610,10 @@
     </div>
   </div>
 
-  <footer id="version">Slime Volleyball v1.4.0</footer>
+  <!-- Background music. Drop your track at public/music.mp3 (loops). -->
+  <audio id="bgmusic" loop preload="none" src="music.mp3"></audio>
+
+  <footer id="version">Slime Volleyball v1.5.0</footer>
 
 <script>
 (function(){
@@ -666,6 +735,23 @@
   // Per side: a chosen color and an optional boss skin name ('' = none).
   var slimeSkins = { p1: {color: BLUE, boss: ''}, p2: {color: PINK, boss: ''} };
   var ballColor = '#ffd23f'; // default gold; changeable in the skins panel
+  // Special ball skins (cosmetic only), cycled with the "Ball" button. The
+  // volleyball comes in three sizes, but the PHYSICS ball is always BALL_R, so
+  // collisions are identical regardless of skin/size — and online stays
+  // deterministic since the size only affects drawing (see drawBall).
+  var BALL_BOSS = [
+    { name:'Volleyball', style:'volleyball', rmul:1.3 }
+  ];
+  var ballSkin = ''; // '' = plain colored ball; otherwise a BALL_BOSS name
+  function ballBossByName(n){ for(var i=0;i<BALL_BOSS.length;i++){ if(BALL_BOSS[i].name===n) return BALL_BOSS[i]; } return null; }
+  // The volleyball skin renders the Noto volleyball emoji (🏐, U+1F3D0) — same
+  // source as the chat emojis. crossOrigin keeps the canvas untainted so the
+  // pixi filters still work; a plain white ball shows until the image loads.
+  var volleyImg = new Image();
+  var volleyReady = false;
+  volleyImg.crossOrigin = 'anonymous';
+  volleyImg.onload = function(){ volleyReady = true; };
+  volleyImg.src = 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f3d0/emoji.svg';
   function skinDark(hex){ return darken(hex, 0.45); }
 
   // In online play, each side's scoreboard label shows the player's chosen
@@ -746,6 +832,11 @@
   var DEFAULT_WIN = 6;
   var WIN = DEFAULT_WIN;
   var hostWin = DEFAULT_WIN; // the host's chosen target for the next online game
+  var WIN_OPTIONS = [3, 5, 6, 7, 10, 15]; // values the host cycles with the Mode button
+  function updateWinModeBtn(){
+    var b = document.getElementById('winmodebtn');
+    if(b) b.textContent = 'Mode: First to ' + WIN;
+  }
   // Set the points-to-win, rebuild the dot row, and refresh the "FIRST TO N"
   // label. Used offline (default) and online (host's choice, synced to guest).
   function setWin(n){
@@ -967,6 +1058,44 @@
     }
   }
 
+  // The net is a solid rounded rectangle (circle-vs-AABB). This runs AFTER the
+  // slime collisions in each sub-step, so a slime pressed against the net can't
+  // shove the ball through it: any overlap is ejected here. A ball squeezed deep
+  // into the corner between a slime and the net pops out along the shallowest
+  // axis — preferring UP, over the net — instead of tunnelling through or
+  // jittering between the two resolvers (the old glitch).
+  function collideNet(){
+    var nl = netX - NET_W/2, nr = netX + NET_W/2, ntop = GROUND - NET_H, r = ball.r;
+    // Ball center driven inside the net column (deep penetration): eject along
+    // the shallowest of up / left / right, preferring up so it clears the net.
+    if(ball.x > nl && ball.x < nr && ball.y > ntop){
+      var toUp = ball.y - (ntop - r), toLeft = ball.x - (nl - r), toRight = (nr + r) - ball.x;
+      if(toUp <= toLeft && toUp <= toRight){
+        ball.y = ntop - r; if(ball.vy > 0) ball.vy = -Math.abs(ball.vy) * 0.8;
+      } else if(toLeft <= toRight){
+        ball.x = nl - r; if(ball.vx > 0) ball.vx = -Math.abs(ball.vx);
+      } else {
+        ball.x = nr + r; if(ball.vx < 0) ball.vx = Math.abs(ball.vx);
+      }
+      return;
+    }
+    // Ball center outside the net: bounce off the closest point of the rect, so
+    // faces reflect cleanly and the top corners round off naturally.
+    var qx = Math.max(nl, Math.min(ball.x, nr));
+    var qy = Math.max(ntop, Math.min(ball.y, GROUND));
+    var dx = ball.x - qx, dy = ball.y - qy;
+    var d2 = dx*dx + dy*dy;
+    if(d2 >= r*r || d2 === 0) return;
+    var d = Math.sqrt(d2), nx = dx/d, ny = dy/d;
+    ball.x = qx + nx*r; ball.y = qy + ny*r;
+    var vn = ball.vx*nx + ball.vy*ny;
+    if(vn < 0){
+      ball.vx -= 2*vn*nx;
+      ball.vy -= 2*vn*ny;
+      if(ny < -0.5) ball.vy *= 0.8; // landing on the top cap: damp like before
+    }
+  }
+
   function updateBall(){
     if(!ball.live) return;
     ball.vy += BALL_GRAV;
@@ -976,22 +1105,14 @@
     // contact normal is computed from a shallow overlap and the bounce is clean.
     var steps = Math.max(1, Math.ceil(Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy) / (ball.r * 0.5)));
     var stepX = ball.vx / steps, stepY = ball.vy / steps;
-    var netLeft = netX - NET_W/2, netRight = netX + NET_W/2, netTop = GROUND - NET_H;
     for(var i=0; i<steps; i++){
       ball.x += stepX;
       ball.y += stepY;
       if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx)*WALL_BOUNCE; }
       if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx)*WALL_BOUNCE; }
-      if(ball.x+ball.r > netLeft && ball.x-ball.r < netRight && ball.y+ball.r > netTop){
-        if(ball.y < netTop && ball.vy>0){
-          ball.vy = -Math.abs(ball.vy)*0.8; ball.y = netTop - ball.r;
-        } else {
-          if(ball.x < netX){ ball.x = netLeft - ball.r; ball.vx = -Math.abs(ball.vx); }
-          else { ball.x = netRight + ball.r; ball.vx = Math.abs(ball.vx); }
-        }
-      }
       collideSlime(p1);
       collideSlime(p2);
+      collideNet(); // after the slimes: the net gets the final say, so it can't be shoved through
       if(ball.y >= GROUND - ball.r){
         ball.y = GROUND - ball.r;
         ball.live = false;
@@ -1105,9 +1226,9 @@
   var CLOUD_SPEED = 0.18;            // px per frame, slow drift to the right
   function randCloudSprite(){ return Math.floor(Math.random()*CLOUD_SPRITES.length); }
   var CLOUDS = [
-    {x:120, y:40, sp:randCloudSprite()},
-    {x:380, y:24, sp:randCloudSprite()},
-    {x:620, y:56, sp:randCloudSprite()}
+    {x:120, y:64, sp:randCloudSprite()},
+    {x:380, y:48, sp:randCloudSprite()},
+    {x:620, y:80, sp:randCloudSprite()}
   ];
   var BUSH_SPRITES = [
     {w:96, h:51, src:'data:image/png;base64,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'},
@@ -1161,6 +1282,22 @@
     }
   }
 
+  // Draw the ball. The DRAWN radius can be scaled by a ball skin, but ball.r
+  // (used by all the physics) is untouched, so collisions never change.
+  function drawBall(){
+    var sk = ballSkin ? ballBossByName(ballSkin) : null;
+    var vr = BALL_R * (sk && sk.rmul ? sk.rmul : 1);
+    if(sk && sk.style === 'volleyball' && volleyReady){
+      ctx.drawImage(volleyImg, ball.x - vr, ball.y - vr, vr*2, vr*2); // Noto volleyball emoji
+      return;
+    }
+    // plain ball — also the fallback for the volleyball before its emoji loads
+    ctx.fillStyle = '#241700'; // dark outline ring for contrast on any background
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = (sk && sk.style === 'volleyball') ? '#eef2f8' : ballColor;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, vr, 0, Math.PI*2); ctx.fill();
+  }
+
   function draw(){
     if(theme === 'city'){
       drawCityBg();
@@ -1190,12 +1327,7 @@
     // current simulated state — drawn directly (rollback corrects them in-sim).
     drawSlime(p1);
     drawSlime(p2);
-    // Strong dark outline ring (drawn as a slightly larger circle behind the
-    // body) so the ball stays high-contrast against any background.
-    ctx.fillStyle = '#241700';
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r + 2.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = ballColor;
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.fill();
+    drawBall();
   }
 
   // ===================== NETWORKING =====================
@@ -1550,6 +1682,9 @@
     document.getElementById('modebtn').style.display = 'none';
     document.getElementById('resetbtn').style.display = 'none';
     document.getElementById('leavebtn').style.display = '';
+    // Only the host can pick the points-to-win; the guest follows via 'config'.
+    document.getElementById('winmodebtn').style.display = asHost ? '' : 'none';
+    updateWinModeBtn();
     netPaused = false;
     document.getElementById('controlhint').innerHTML =
       asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
@@ -1785,7 +1920,7 @@
       if(CLOUDS[ci].x - spw/2 > W){
         CLOUDS[ci].x = -spw/2;
         CLOUDS[ci].sp = randCloudSprite();
-        CLOUDS[ci].y = 16 + Math.floor(Math.random()*54);
+        CLOUDS[ci].y = 40 + Math.floor(Math.random()*54);
       }
     }
   }
@@ -1842,7 +1977,7 @@
   var touchpadEl = document.getElementById('touchpad');
   if(isTouch()){
     touchpadEl.classList.add('show');
-    document.getElementById('touchctrlbtn').style.display = '';
+    document.body.classList.add('touch-joystick'); // reserve scroll space below the controls
   }
   function bindHold(id, key){
     var el = document.getElementById(id);
@@ -1854,7 +1989,6 @@
     el.addEventListener('mouseup', off);
     el.addEventListener('mouseleave', off);
   }
-  bindHold('tleft','a'); bindHold('tright','d'); bindHold('tjump','w');
   bindHold('joystick-jump','w');
 
   // Virtual joystick: drag the knob, push past a deadzone left/right to engage
@@ -1874,10 +2008,12 @@
       var dead = r * 0.22;
       keys['a'] = x < -dead;
       keys['d'] = x > dead;
+      if(joyMode === 'stick'){ keys['w'] = y < -dead; } // mode 1: push the stick up to jump
     }
     function release(){
       knob.style.transform = '';
       keys['a'] = false; keys['d'] = false;
+      if(joyMode === 'stick') keys['w'] = false;
       base.classList.remove('active');
       activeTouchId = null;
       usingMouse = false;
@@ -1931,30 +2067,38 @@
     window.addEventListener('mouseup', function(){ if(usingMouse) release(); });
   })();
 
-  // Touch control toggle: switch between arrow buttons and joystick + jump.
-  var touchCtrl = 'arrows';
-  try{
-    var storedCtrl = localStorage.getItem('slimeTouchCtrl');
-    if(storedCtrl === 'joystick' || storedCtrl === 'arrows') touchCtrl = storedCtrl;
-  }catch(e){}
-  function applyTouchCtrl(){
-    touchpadEl.classList.toggle('layout-arrows', touchCtrl === 'arrows');
-    touchpadEl.classList.toggle('layout-joystick', touchCtrl === 'joystick');
-    // Drives the @media bottom-padding rule so content scrolls above the
-    // fixed touchpad without being hidden behind it.
-    var onTouch = isTouch();
-    document.body.classList.toggle('touch-arrows',   onTouch && touchCtrl === 'arrows');
-    document.body.classList.toggle('touch-joystick', onTouch && touchCtrl === 'joystick');
-    document.getElementById('touchctrlbtn').textContent =
-      'Touch: ' + (touchCtrl === 'joystick' ? 'Joystick' : 'Arrows');
-    // Reset any held keys when switching, so a stuck press doesn't carry over.
-    keys['a'] = false; keys['d'] = false; keys['w'] = false;
+  // Joystick mode: 'button' = joystick + dedicated JUMP button; 'stick' = a lone
+  // joystick where pushing up jumps (no jump button). The center button switches.
+  var joyMode = 'button';
+  try{ var jm = localStorage.getItem('slimeJoyMode'); if(jm === 'button' || jm === 'stick') joyMode = jm; }catch(e){}
+  function applyJoyMode(){
+    touchpadEl.classList.toggle('mode-stick', joyMode === 'stick');
+    touchpadEl.classList.toggle('mode-button', joyMode === 'button');
+    var b = document.getElementById('joymode');
+    if(b) b.textContent = (joyMode === 'button') ? 'Jump: Button' : 'Jump: Stick';
+    keys['a'] = keys['d'] = keys['w'] = false; // clear held keys when switching
   }
-  applyTouchCtrl();
-  document.getElementById('touchctrlbtn').addEventListener('click', function(){
-    touchCtrl = (touchCtrl === 'arrows') ? 'joystick' : 'arrows';
-    try{ localStorage.setItem('slimeTouchCtrl', touchCtrl); }catch(e){}
-    applyTouchCtrl();
+  applyJoyMode();
+  document.getElementById('joymode').addEventListener('click', function(){
+    joyMode = (joyMode === 'button') ? 'stick' : 'button';
+    try{ localStorage.setItem('slimeJoyMode', joyMode); }catch(e){}
+    applyJoyMode();
+  });
+
+  // Joystick side: dock it on the left (default) or right, for handedness. The
+  // corner arrow flips it; the choice is remembered.
+  var joySide = 'left';
+  try{ var js = localStorage.getItem('slimeJoySide'); if(js === 'left' || js === 'right') joySide = js; }catch(e){}
+  function applyJoySide(){
+    touchpadEl.classList.toggle('joy-right', joySide === 'right');
+    var fb = document.getElementById('joyflip');
+    if(fb) fb.innerHTML = (joySide === 'left') ? '&#8594;' : '&#8592;'; // points to where it'll move
+  }
+  applyJoySide();
+  document.getElementById('joyflip').addEventListener('click', function(){
+    joySide = (joySide === 'left') ? 'right' : 'left';
+    try{ localStorage.setItem('slimeJoySide', joySide); }catch(e){}
+    applyJoySide();
   });
 
   document.getElementById('resetbtn').addEventListener('click', function(){
@@ -1963,6 +2107,33 @@
   document.getElementById('leavebtn').addEventListener('click', function(){
     netLeave(); // tells the server, clears the saved room, then reloads to offline
   });
+
+  // Background music toggle (bottom-right). Off by default — browsers block
+  // autoplay, and the choice is remembered. Looks for public/music.mp3.
+  (function(){
+    var btn = document.getElementById('musicbtn'), audio = document.getElementById('bgmusic');
+    if(!btn || !audio) return;
+    audio.volume = 0.5;
+    var on = false;
+    try{ on = localStorage.getItem('slimeMusic') === 'on'; }catch(e){}
+    function apply(){
+      btn.classList.toggle('music-off', !on);
+      if(on){ var p = audio.play(); if(p && p.catch) p.catch(function(){}); }
+      else { audio.pause(); }
+    }
+    btn.addEventListener('click', function(){
+      on = !on;
+      try{ localStorage.setItem('slimeMusic', on ? 'on' : 'off'); }catch(e){}
+      apply();
+    });
+    btn.classList.toggle('music-off', !on);
+    // If it was left on, resume on the first user gesture (autoplay policy).
+    if(on){
+      var resume = function(){ apply(); window.removeEventListener('pointerdown', resume); window.removeEventListener('keydown', resume); };
+      window.addEventListener('pointerdown', resume);
+      window.addEventListener('keydown', resume);
+    }
+  })();
   var themeBtn = document.getElementById('themebtn');
   function applyTheme(){ themeBtn.textContent = 'Theme: ' + (theme === 'city' ? 'City' : 'Grassy'); }
   applyTheme();
@@ -1980,6 +2151,17 @@
     twoPlayer = !twoPlayer;
     init();
     setMsg('SLIME<br>VOLLEYBALL', twoPlayer ? '2 PLAYER MODE' : 'PRESS SPACE OR TAP');
+  });
+  // Online host: cycle the points-to-win. setWin() rebuilds the dot row + "FIRST
+  // TO N" label, and the 'config' message makes the guest do the same.
+  document.getElementById('winmodebtn').addEventListener('click', function(){
+    if(netMode !== 'host') return; // only the host sets the mode
+    var idx = WIN_OPTIONS.indexOf(WIN);
+    var next = WIN_OPTIONS[(idx + 1) % WIN_OPTIONS.length];
+    hostWin = next;
+    setWin(next);              // updates WIN, the dots, and the FIRST TO label
+    updateWinModeBtn();
+    netSend({type:'config', win: next}); // guest adopts it → its dot count updates too
   });
 
   // Lobby wiring
@@ -2369,6 +2551,24 @@
     applyChatCollapsed();
   });
 
+  // Hide/show the skins panel, mirroring the chat toggle. Preference persists.
+  var skinsCollapsed = false;
+  try{ skinsCollapsed = localStorage.getItem('slimeSkinsCollapsed') === '1'; }catch(e){}
+  var skinsEl        = document.getElementById('skinpickers');
+  var skinsToggleBtn = document.getElementById('skins-toggle');
+  var skinsToggleLbl = document.getElementById('skins-toggle-label');
+  function applySkinsCollapsed(){
+    skinsEl.classList.toggle('collapsed', skinsCollapsed);
+    skinsToggleLbl.textContent = skinsCollapsed ? 'Show skins' : 'Hide skins';
+    skinsToggleBtn.setAttribute('aria-expanded', skinsCollapsed ? 'false' : 'true');
+  }
+  applySkinsCollapsed();
+  skinsToggleBtn.addEventListener('click', function(){
+    skinsCollapsed = !skinsCollapsed;
+    try{ localStorage.setItem('slimeSkinsCollapsed', skinsCollapsed ? '1' : '0'); }catch(e){}
+    applySkinsCollapsed();
+  });
+
   function chatSaveUsername(){
     var v = (chatNameInput.value || '').trim().slice(0, 16);
     if(!v) return;
@@ -2463,6 +2663,7 @@
   function selectColor(side, col){
     if(side === 'ball'){
       ballColor = col;
+      ballSkin = ''; // a chosen colour and the volleyball skin are mutually exclusive
       updateSkinControls('ball');
       return;
     }
@@ -2474,6 +2675,13 @@
   }
   // Cycle the boss skin: Off -> each boss -> Off.
   function cycleBoss(side){
+    if(side === 'ball'){ // the ball cycles its own special skins (volleyball sizes)
+      var bn = BALL_BOSS.map(function(b){ return b.name; });
+      var bi = bn.indexOf(ballSkin) + 1; // -1 (Off) -> 0
+      ballSkin = (bi >= bn.length) ? '' : bn[bi];
+      updateSkinControls('ball');
+      return;
+    }
     var names = BOSS_SKINS.map(function(b){ return b.name; });
     var idx = names.indexOf(slimeSkins[side].boss); // -1 when Off
     idx = idx + 1;
@@ -2484,7 +2692,7 @@
   }
   function updateSkinControls(side){
     var col = (side === 'ball') ? ballColor : slimeSkins[side].color;
-    var boss = (side === 'ball') ? '' : slimeSkins[side].boss;
+    var boss = (side === 'ball') ? ballSkin : slimeSkins[side].boss;
     var container = document.querySelector('.swatches[data-side="' + side + '"]');
     if(container){
       var sws = container.querySelectorAll('.swatch');
@@ -2496,7 +2704,7 @@
     if(custom && !boss && /^#[0-9a-fA-F]{6}$/.test(col)){ custom.value = col; }
     var bossBtn = document.querySelector('.skin-boss[data-side="' + side + '"]');
     if(bossBtn){
-      bossBtn.textContent = boss ? boss : 'Boss: Off';
+      bossBtn.textContent = boss ? boss : (side === 'ball' ? 'Ball: Off' : 'Boss: Off');
       bossBtn.classList.toggle('active', !!boss);
     }
   }
