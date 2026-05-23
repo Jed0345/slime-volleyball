@@ -85,6 +85,14 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Latency probe: bounce the client's timestamp straight back so it can
+    // measure its round-trip time to the relay. Handled here so it never gets
+    // forwarded to the peer.
+    if (msg.type === "ping") {
+      send(ws, { type: "pong", t: msg.t });
+      return;
+    }
+
     if (msg.type === "create") {
       const code = msg.code;
       const existing = rooms.get(code);

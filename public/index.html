@@ -83,6 +83,22 @@
     text-shadow:2px 2px 0 rgba(0,0,0,0.4);
   }
 
+  /* Latency indicator, top-left of the court (online only). */
+  #pingbox{
+    position:absolute; top:12px; left:12px; z-index:2; pointer-events:none;
+    display:none; flex-direction:column; gap:3px;
+    font-family:'PixelBold', monospace; font-size:9px; letter-spacing:1px;
+    background:rgba(27,32,48,0.55); border:2px solid rgba(255,255,255,0.25);
+    border-radius:6px; padding:5px 8px;
+    text-shadow:2px 2px 0 rgba(0,0,0,0.4);
+  }
+  #pingbox .ping-row{ display:flex; align-items:center; gap:6px; }
+  #pingbox .ping-who{ color:#9fb3d1; }
+  #pingbox .ping-val{ margin-left:auto; font-variant-numeric:tabular-nums; }
+  #pingbox .ping-val.good{ color:#5dd663; }
+  #pingbox .ping-val.ok{   color:#f4b73e; }
+  #pingbox .ping-val.bad{  color:#e8537f; }
+
   #stage{ position:relative; width:100%; max-width:750px; }
   #game{ width:100%; display:block; border-radius:12px; }
   #msg{
@@ -386,6 +402,10 @@
     <canvas id="pixi-canvas" width="750" height="375"></canvas>
     <div id="noise-overlay"></div>
     <p id="sv-firstto">FIRST TO 6</p>
+    <div id="pingbox">
+      <span class="ping-row"><span class="ping-who">YOU</span><span id="ping-you" class="ping-val">--</span></span>
+      <span class="ping-row"><span class="ping-who">OPP</span><span id="ping-opp" class="ping-val">--</span></span>
+    </div>
     <div id="msg">
       <div id="msgtext">SLIME<br>VOLLEYBALL</div>
       <div id="msgsub">PRESS SPACE OR TAP</div>
@@ -514,7 +534,7 @@
     </div>
   </div>
 
-  <footer id="version">Slime Volleyball v1.1.0</footer>
+  <footer id="version">Slime Volleyball v1.2.0</footer>
 
 <script>
 (function(){
@@ -590,10 +610,20 @@
   var netPaused = false; // true while the opponent is mid-reconnect (grace window)
   var netInput = {left:false, right:false, jump:false}; // guest's remote inputs (host reads these)
   // Guest-side smoothing: the opponent (host) slime is rendered toward the
-  // latest authoritative position to absorb network jitter (the ball is left
-  // unsmoothed so it stays frame-accurate). NET_INTERP is the per-frame catch-up.
+  // latest authoritative position to absorb network jitter. NET_INTERP is the
+  // per-frame catch-up.
   var netP1 = {x:0, y:0};
   var NET_INTERP = 0.4;
+  // Guest-side ball latency compensation: the host's ball packet describes where
+  // the ball was ~one network hop ago, so we dead-reckon it forward by the
+  // measured one-way latency (BALL_LEAD) to line it up with "now" — otherwise it
+  // visibly trails the guest's (predicted) slime. BALL_CORRECT eases each
+  // packet's correction so a bounce doesn't snap.
+  var BALL_LEAD_MAX = 110; // ms cap on how far ahead we project the ball
+  var BALL_CORRECT = 0.5;  // per-packet easing toward the compensated position
+  // Round-trip latency to the relay for each side (shown in the ping indicator).
+  var myPing = 0, peerPing = 0, pingTimer = null;
+  function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
 
   var BLUE = '#2f7fd6', BLUE_D = '#1c3f6e';
   var PINK = '#e8537f', PINK_D = '#7a1f3a';
@@ -1145,6 +1175,18 @@
     if(netMode === 'guest'){
       p1.x += (netP1.x - p1.x) * NET_INTERP;
       p1.y += (netP1.y - p1.y) * NET_INTERP;
+      // Advance the latency-compensated ball at its last known velocity between
+      // packets, so it moves smoothly at any refresh rate. Each packet corrects
+      // it (in netOnMessage); here we just integrate forward by real frame time.
+      if(state === 'play' && ball.live){
+        var bd = _frameMs / STEP_MS; // elapsed render frame, in physics ticks
+        ball.x += ball.vx * bd;
+        ball.y += ball.vy * bd;
+        ball.vy += BALL_GRAV * bd; // keep the arc curving between packets
+        if(ball.x < FIELD_L + ball.r) ball.x = FIELD_L + ball.r;
+        if(ball.x > FIELD_R - ball.r) ball.x = FIELD_R - ball.r;
+        if(ball.y > GROUND - ball.r) ball.y = GROUND - ball.r;
+      }
     }
     drawSlime(p1);
     drawSlime(p2);
@@ -1184,6 +1226,32 @@
 
   function netSend(obj){ if(ws && ws.readyState === WebSocket.OPEN){ ws.send(JSON.stringify(obj)); } }
 
+  // ---- Ping: each side measures its own round-trip to the relay (server echoes
+  // 'ping' as 'pong'), then relays that number to the peer so both players can
+  // see each other's latency. The ball compensation also reads these values.
+  function pingClass(ms){ return ms < 60 ? 'good' : (ms < 120 ? 'ok' : 'bad'); }
+  function updatePingUI(){
+    var box = document.getElementById('pingbox');
+    if(!box) return;
+    if(!netMode){ box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    var you = document.getElementById('ping-you');
+    var opp = document.getElementById('ping-opp');
+    you.textContent = myPing   ? Math.round(myPing)  +'ms' : '--';
+    opp.textContent = peerPing ? Math.round(peerPing)+'ms' : '--';
+    you.className = 'ping-val ' + pingClass(myPing   || 999);
+    opp.className = 'ping-val ' + pingClass(peerPing || 999);
+  }
+  function startPing(){
+    stopPing();
+    myPing = 0; peerPing = 0;
+    updatePingUI();
+    var probe = function(){ if(ws && ws.readyState === WebSocket.OPEN){ netSend({type:'ping', t: nowMs()}); } };
+    probe();
+    pingTimer = setInterval(probe, 1000);
+  }
+  function stopPing(){ if(pingTimer){ clearInterval(pingTimer); pingTimer = null; } }
+
   function randCode(){
     var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     var s = '';
@@ -1213,6 +1281,7 @@
   }
   function netLeave(){
     netSend({type:'leave'});
+    stopPing();
     clearRoom();
     location.reload();
   }
@@ -1237,7 +1306,7 @@
       type:'state',
       st: state,
       p1:{x:p1.x, y:p1.y}, p2:{x:p2.x, y:p2.y},
-      ball:{x:ball.x, y:ball.y, live:ball.live},
+      ball:{x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy, live:ball.live},
       sc:{a:scores.p1, b:scores.p2},
       msg: (document.getElementById('msg').style.display !== 'none')
             ? {t:document.getElementById('msgtext').innerHTML, s:document.getElementById('msgsub').innerHTML}
@@ -1290,11 +1359,22 @@
       setMsg('CONNECTED', 'WAITING FOR HOST...');
     }
     chatSetConnected(true);
+    startPing(); // begin measuring latency for both the indicator and ball compensation
   }
 
   function netOnMessage(ev){
     var m;
     try{ m = JSON.parse(ev.data); }catch(e){ return; }
+
+    // Latency: our probe came back — update our ping and tell the peer.
+    if(m.type === 'pong'){
+      var rtt = nowMs() - m.t;
+      myPing = myPing ? (myPing * 0.7 + rtt * 0.3) : rtt; // light smoothing
+      netSend({type:'netping', ms: Math.round(myPing)});
+      updatePingUI();
+      return;
+    }
+    if(m.type === 'netping'){ if(typeof m.ms === 'number'){ peerPing = m.ms; updatePingUI(); } return; }
 
     if(m.type === 'created'){ saveRoom(m.code, 'host'); lobbyStatus('Share this code: ' + m.code + ' — waiting for a friend to join...'); return; }
     if(m.type === 'joined'){ saveRoom(m.code, 'guest'); lobbyStatus('Joined! Starting...'); return; }
@@ -1306,6 +1386,8 @@
     if(m.type === 'rejoin-failed'){
       clearRoom();
       netMode = null;
+      stopPing();
+      updatePingUI();
       lobbyStatus('That room is no longer available.');
       setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
       return;
@@ -1334,6 +1416,8 @@
       clearRoom();
       hideRematch();
       chatSetConnected(false);
+      stopPing();
+      updatePingUI();
       return;
     }
     if(m.type === 'chat'){ chatOnPeerMessage(m); return; }
@@ -1378,16 +1462,31 @@
       var prevState = state;
       state = m.st;
       // Opponent slime: keep the latest authoritative position as a smoothing
-      // target (draw() eases p1 toward it). The ball is snapped — it's the most
-      // latency-sensitive object, so we keep it frame-accurate, not eased.
+      // target (draw() eases p1 toward it).
       netP1.x = m.p1.x; netP1.y = m.p1.y;
-      ball.x = m.ball.x; ball.y = m.ball.y; ball.live = m.ball.live;
+      var bvx = (typeof m.ball.vx === 'number') ? m.ball.vx : 0;
+      var bvy = (typeof m.ball.vy === 'number') ? m.ball.vy : 0;
+      ball.live = m.ball.live;
       // On any non-rally frame (point/menu/serve/gameover) or the first frame of
       // a new rally, snap everything to the host: this picks up serve resets and
       // re-grounds our predicted slime so prediction starts from the truth.
       if(state !== 'play' || prevState !== 'play'){
         p1.x = netP1.x; p1.y = netP1.y;
         p2.x = m.p2.x; p2.y = m.p2.y; p2.vy = 0; p2.onGround = (p2.y >= GROUND);
+        ball.x = m.ball.x; ball.y = m.ball.y; ball.vx = bvx; ball.vy = bvy;
+      } else {
+        // Mid-rally: dead-reckon the ball forward by the one-way latency
+        // (~half the peer-to-peer round-trip) so it lines up with "now", then
+        // ease toward it. draw() advances it between packets.
+        var lead = Math.min(Math.max((myPing + peerPing) / 2, 0), BALL_LEAD_MAX) / STEP_MS; // in ticks
+        var tx = m.ball.x + bvx * lead;
+        var ty = m.ball.y + bvy * lead;
+        if(tx < FIELD_L + ball.r) tx = FIELD_L + ball.r;
+        if(tx > FIELD_R - ball.r) tx = FIELD_R - ball.r;
+        if(ty > GROUND - ball.r) ty = GROUND - ball.r;
+        ball.vx = bvx; ball.vy = bvy;
+        ball.x += (tx - ball.x) * BALL_CORRECT;
+        ball.y += (ty - ball.y) * BALL_CORRECT;
       }
       scores.p1 = m.sc.a; scores.p2 = m.sc.b;
       updateScore();
@@ -1522,11 +1621,12 @@
   // refresh rate) but advance the simulation in fixed 1/60s steps, catching up
   // with however much real time elapsed since the last frame.
   var STEP_MS = 1000 / 60;
-  var _lastT = 0, _accum = 0;
+  var _lastT = 0, _accum = 0, _frameMs = STEP_MS;
   function loop(now){
     if(!_lastT) _lastT = now;
     var elapsed = now - _lastT;
     _lastT = now;
+    _frameMs = Math.min(elapsed, 50); // real render-frame time for ball extrapolation
     // Clamp so a backgrounded tab (or a long stall) doesn't unleash a flood of
     // catch-up steps when it resumes.
     if(elapsed > 250) elapsed = 250;
