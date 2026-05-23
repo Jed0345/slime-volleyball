@@ -172,17 +172,6 @@
       font-size:10px; line-height:1.6;
       -webkit-text-stroke-width:1.5px;
     }
-    /* Pin the on-screen controls to the bottom of the viewport so the
-       player can always reach them without scrolling. */
-    #touchpad.show{
-      position:fixed; left:0; right:0; bottom:0;
-      max-width:none; width:100%;
-      padding:10px 12px;
-      z-index:50;
-    }
-    /* Reserve scroll space so the chat/controls aren't permanently hidden
-       behind the fixed touchpad. */
-    body.touch-joystick{ padding-bottom:175px; }
   }
 
   #controls{
@@ -199,37 +188,46 @@
   button:hover{ background:#262c3b; }
   button:active{ transform:scale(0.97); }
 
-  #touchpad{ display:none; width:100%; max-width:750px; position:relative; }
-  #touchpad.show{ display:flex; }
+  /* The container ignores touches in its empty areas (so faded/empty space never
+     blocks the court); only the interactive controls below opt back in. */
+  #touchpad{ display:none; width:100%; max-width:750px; position:relative; pointer-events:none; }
+  /* Pinned to the bottom of the viewport on any touch device so the player can
+     always reach the controls without scrolling. (.show is only added on touch.) */
+  #touchpad.show{
+    display:flex;
+    position:fixed; left:0; right:0; bottom:0;
+    max-width:none; width:100%;
+    padding:10px 12px;
+    z-index:50;
+  }
+  /* Reserve scroll space so content isn't permanently hidden behind it. */
+  body.touch-joystick{ padding-bottom:175px; }
   #touchpad-joystick{
     display:flex; width:100%; align-items:flex-end; justify-content:space-between;
     gap:12px; user-select:none; -webkit-user-select:none;
   }
-  /* Mode "stick" (1): a single joystick — push up to jump, no jump button; the
-     corner arrow docks it left/right. Mode "button" (2): joystick + dedicated
-     JUMP button on opposite sides (the default space-between layout above). */
-  #touchpad.mode-stick #joystick-jump{ display:none; }
-  #touchpad.mode-stick #touchpad-joystick{ justify-content:flex-start; }
-  #touchpad.mode-stick.joy-right #touchpad-joystick{ justify-content:flex-end; }
-  /* Corner left/right arrow — only shown in stick mode. */
-  #joyflip{
-    display:none; position:absolute; top:6px; right:14px; z-index:1;
-    width:40px; height:40px; padding:0; line-height:1; font-size:22px;
-    align-items:center; justify-content:center;
-    border-radius:50%; background:rgba(20,24,40,0.6); border:1px solid #3a4150; color:#e8ecf4;
-  }
-  #touchpad.mode-stick #joyflip{ display:flex; }
-  #touchpad.mode-stick.joy-right #joyflip{ right:auto; left:14px; }
-  /* Mode switch button, centered along the bottom of the screen. */
-  #joymode{
+  /* The joystick handles left/right; the JUMP button handles jumping. They sit
+     on opposite sides (the default space-between layout above). */
+  /* Opacity slider, centered along the bottom of the screen — lets the player
+     fade the controls down so they don't obscure the court. */
+  #joyopacity{
     position:absolute; left:50%; bottom:8px; transform:translateX(-50%); z-index:1;
-    padding:5px 10px; font-size:11px; border-radius:8px; white-space:nowrap;
-    background:rgba(20,24,40,0.6); border:1px solid #3a4150; color:#e8ecf4;
+    width:90px; height:22px; cursor:pointer; accent-color:#4aa3ff; pointer-events:auto;
   }
+  /* Faint eye toggle above the slider: tap to tuck the slider away and fade the
+     controls to 10%; tap again to bring them back. */
+  #joyopacity-eye{
+    position:absolute; left:50%; bottom:34px; transform:translateX(-50%); z-index:1;
+    width:24px; height:24px; pointer-events:auto; cursor:pointer; opacity:0.4; color:#cfd6e4;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #joyopacity-eye svg{ width:100%; height:100%; }
+  #joyopacity-eye .eye-slash{ display:none; }
+  #joyopacity-eye.off .eye-slash{ display:inline; }
   #joystick-base{
     position:relative; width:130px; height:130px; border-radius:50%;
     background:rgba(0,0,0,0.25); border:2px solid #3a4150;
-    touch-action:none; flex-shrink:0;
+    touch-action:none; flex-shrink:0; pointer-events:auto;
   }
   #joystick-knob{
     position:absolute; left:50%; top:50%;
@@ -239,13 +237,15 @@
     transition:background .1s;
   }
   #joystick-base.active #joystick-knob{ background:rgba(255,255,255,0.75); }
+  /* White/gray to match the joystick: gray translucent base, white border + text,
+     filling white on press like the knob does when active. */
   #joystick-jump{
     width:120px; height:120px; border-radius:50%;
     font-size:18px; font-weight:bold; letter-spacing:1px;
-    background:rgba(232,83,127,0.25); border:2px solid #e8537f;
-    color:#fff; flex-shrink:0;
+    background:rgba(0,0,0,0.25); border:2px solid #e8ecf4;
+    color:#e8ecf4; flex-shrink:0; pointer-events:auto;
   }
-  #joystick-jump:active{ background:rgba(232,83,127,0.5); }
+  #joystick-jump:active{ background:rgba(255,255,255,0.55); color:#1a1f2e; }
 
   #chat{
     position:relative;
@@ -600,8 +600,8 @@
   </div>
 
   <div id="touchpad">
-    <button id="joyflip" type="button" aria-label="Switch joystick side">&#8594;</button>
-    <button id="joymode" type="button" aria-label="Switch joystick mode">Jump: Button</button>
+    <span id="joyopacity-eye" role="button" tabindex="0" aria-label="Hide controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/><line class="eye-slash" x1="3" y1="3" x2="21" y2="21"/></svg></span>
+    <input id="joyopacity" type="range" min="0" max="100" step="5" value="100" aria-label="Controls opacity">
     <div id="touchpad-joystick">
       <div id="joystick-base" aria-label="Joystick">
         <div id="joystick-knob"></div>
@@ -613,7 +613,7 @@
   <!-- Background music. Drop your track at public/music.mp3 (loops). -->
   <audio id="bgmusic" loop preload="none" src="music.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.5.0</footer>
+  <footer id="version">Slime Volleyball v1.6.0</footer>
 
 <script>
 (function(){
@@ -2002,18 +2002,18 @@
     function applyOffset(x, y){
       var r = base.offsetWidth / 2;
       var maxR = r - 14;
-      var d = Math.hypot(x, y);
-      if(d > maxR){ x = x * maxR / d; y = y * maxR / d; }
-      knob.style.transform = 'translate(calc(-50% + ' + x + 'px), calc(-50% + ' + y + 'px))';
+      // Locked to the horizontal axis: only left/right matters, so the knob
+      // slides along x and stays vertically centered (vertical drag is ignored).
+      if(x > maxR) x = maxR;
+      else if(x < -maxR) x = -maxR;
+      knob.style.transform = 'translate(calc(-50% + ' + x + 'px), -50%)';
       var dead = r * 0.22;
       keys['a'] = x < -dead;
       keys['d'] = x > dead;
-      if(joyMode === 'stick'){ keys['w'] = y < -dead; } // mode 1: push the stick up to jump
     }
     function release(){
       knob.style.transform = '';
       keys['a'] = false; keys['d'] = false;
-      if(joyMode === 'stick') keys['w'] = false;
       base.classList.remove('active');
       activeTouchId = null;
       usingMouse = false;
@@ -2067,38 +2067,33 @@
     window.addEventListener('mouseup', function(){ if(usingMouse) release(); });
   })();
 
-  // Joystick mode: 'button' = joystick + dedicated JUMP button; 'stick' = a lone
-  // joystick where pushing up jumps (no jump button). The center button switches.
-  var joyMode = 'button';
-  try{ var jm = localStorage.getItem('slimeJoyMode'); if(jm === 'button' || jm === 'stick') joyMode = jm; }catch(e){}
-  function applyJoyMode(){
-    touchpadEl.classList.toggle('mode-stick', joyMode === 'stick');
-    touchpadEl.classList.toggle('mode-button', joyMode === 'button');
-    var b = document.getElementById('joymode');
-    if(b) b.textContent = (joyMode === 'button') ? 'Jump: Button' : 'Jump: Stick';
-    keys['a'] = keys['d'] = keys['w'] = false; // clear held keys when switching
+  // Controls opacity: the slider fades the joystick + JUMP button so they don't
+  // block the view of the court. The eye taps between "shown" (follow the slider)
+  // and "hidden" (slider tucked away, controls dropped to 10%). Both remembered.
+  var joyEl = document.getElementById('touchpad-joystick');
+  var opacityInput = document.getElementById('joyopacity');
+  var eyeBtn = document.getElementById('joyopacity-eye');
+  var joyOpacity = 100;
+  var joyHidden = false;
+  try{ var jo = parseInt(localStorage.getItem('slimeJoyOpacity'), 10); if(jo >= 0 && jo <= 100) joyOpacity = jo; }catch(e){}
+  try{ joyHidden = localStorage.getItem('slimeJoyHidden') === '1'; }catch(e){}
+  function applyJoyOpacity(){
+    joyEl.style.opacity = (joyHidden ? 0.1 : joyOpacity / 100).toString();
+    opacityInput.style.display = joyHidden ? 'none' : '';
+    opacityInput.value = joyOpacity;
+    eyeBtn.classList.toggle('off', joyHidden);
   }
-  applyJoyMode();
-  document.getElementById('joymode').addEventListener('click', function(){
-    joyMode = (joyMode === 'button') ? 'stick' : 'button';
-    try{ localStorage.setItem('slimeJoyMode', joyMode); }catch(e){}
-    applyJoyMode();
+  applyJoyOpacity();
+  opacityInput.addEventListener('input', function(){
+    var v = parseInt(opacityInput.value, 10); // keep 0 (don't let it fall back to 100)
+    joyOpacity = isNaN(v) ? 100 : v;
+    try{ localStorage.setItem('slimeJoyOpacity', joyOpacity); }catch(e){}
+    applyJoyOpacity();
   });
-
-  // Joystick side: dock it on the left (default) or right, for handedness. The
-  // corner arrow flips it; the choice is remembered.
-  var joySide = 'left';
-  try{ var js = localStorage.getItem('slimeJoySide'); if(js === 'left' || js === 'right') joySide = js; }catch(e){}
-  function applyJoySide(){
-    touchpadEl.classList.toggle('joy-right', joySide === 'right');
-    var fb = document.getElementById('joyflip');
-    if(fb) fb.innerHTML = (joySide === 'left') ? '&#8594;' : '&#8592;'; // points to where it'll move
-  }
-  applyJoySide();
-  document.getElementById('joyflip').addEventListener('click', function(){
-    joySide = (joySide === 'left') ? 'right' : 'left';
-    try{ localStorage.setItem('slimeJoySide', joySide); }catch(e){}
-    applyJoySide();
+  eyeBtn.addEventListener('click', function(){
+    joyHidden = !joyHidden;
+    try{ localStorage.setItem('slimeJoyHidden', joyHidden ? '1' : '0'); }catch(e){}
+    applyJoyOpacity();
   });
 
   document.getElementById('resetbtn').addEventListener('click', function(){
