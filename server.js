@@ -56,7 +56,14 @@ const server = http.createServer((req, res) => {
 });
 
 // --- WebSocket relay ---
-const wss = new WebSocketServer({ server });
+// perMessageDeflate is off: these messages are tiny (input flags / a position
+// snapshot) and per-frame compression would only add CPU and latency.
+const wss = new WebSocketServer({ server, perMessageDeflate: false });
+
+// Disable Nagle's algorithm on every TCP connection. The relay sends many
+// tiny messages (~60/sec each way); Nagle would buffer them for up to ~40ms
+// trying to coalesce, which shows up directly as input lag in online play.
+server.on("connection", (socket) => { socket.setNoDelay(true); });
 
 function send(ws, obj) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));

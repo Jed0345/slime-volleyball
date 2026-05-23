@@ -589,6 +589,11 @@
   var netMode = null;
   var netPaused = false; // true while the opponent is mid-reconnect (grace window)
   var netInput = {left:false, right:false, jump:false}; // guest's remote inputs (host reads these)
+  // Guest-side smoothing: the opponent (host) slime is rendered toward the
+  // latest authoritative position to absorb network jitter (the ball is left
+  // unsmoothed so it stays frame-accurate). NET_INTERP is the per-frame catch-up.
+  var netP1 = {x:0, y:0};
+  var NET_INTERP = 0.4;
 
   var BLUE = '#2f7fd6', BLUE_D = '#1c3f6e';
   var PINK = '#e8537f', PINK_D = '#7a1f3a';
@@ -1134,6 +1139,13 @@
     ctx.fillStyle = NETCOL;
     ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H);
     flashT++;
+    // Guest only: ease the opponent (host) slime toward its latest authoritative
+    // position so high-refresh displays don't stair-step between 60Hz packets.
+    // Our own slime (p2) is locally predicted, so it's already smooth.
+    if(netMode === 'guest'){
+      p1.x += (netP1.x - p1.x) * NET_INTERP;
+      p1.y += (netP1.y - p1.y) * NET_INTERP;
+    }
     drawSlime(p1);
     drawSlime(p2);
     // Strong dark outline ring (drawn as a slightly larger circle behind the
@@ -1248,6 +1260,7 @@
     scores = {p1:0, p2:0};
     server = 1;
     resetPositions(server);
+    netP1.x = p1.x; netP1.y = p1.y; // start the opponent-smoothing target on its spawn point
     updateScore();
     document.getElementById('p2name').textContent = 'PINK';
     document.getElementById('oppbtn').style.display = 'none';
@@ -1358,12 +1371,24 @@
     }
 
     if(netMode === 'guest' && m.type === 'state'){
-      // Apply the host's authoritative state to local objects for rendering.
+      // Apply the host's authoritative state. The opponent slime + ball are
+      // host-owned; our OWN slime (p2) is predicted locally (see step()), so we
+      // don't overwrite it during a rally — that's what removes the round-trip
+      // input lag. We only resync p2 to the host on resets/serves.
       var prevState = state;
       state = m.st;
-      p1.x = m.p1.x; p1.y = m.p1.y;
-      p2.x = m.p2.x; p2.y = m.p2.y;
+      // Opponent slime: keep the latest authoritative position as a smoothing
+      // target (draw() eases p1 toward it). The ball is snapped — it's the most
+      // latency-sensitive object, so we keep it frame-accurate, not eased.
+      netP1.x = m.p1.x; netP1.y = m.p1.y;
       ball.x = m.ball.x; ball.y = m.ball.y; ball.live = m.ball.live;
+      // On any non-rally frame (point/menu/serve/gameover) or the first frame of
+      // a new rally, snap everything to the host: this picks up serve resets and
+      // re-grounds our predicted slime so prediction starts from the truth.
+      if(state !== 'play' || prevState !== 'play'){
+        p1.x = netP1.x; p1.y = netP1.y;
+        p2.x = m.p2.x; p2.y = m.p2.y; p2.vy = 0; p2.onGround = (p2.y >= GROUND);
+      }
       scores.p1 = m.sc.a; scores.p2 = m.sc.b;
       updateScore();
       if(m.msg){ setMsg(m.msg.t, m.msg.s); } else { hideMsg(); }
@@ -1439,9 +1464,20 @@
   // displays, which is why it looked too fast on some Windows machines.)
   function step(){
     if(netMode === 'guest'){
-      // Guest does NOT run physics. It sends its inputs and renders the state
-      // the host broadcasts (applied in netOnMessage). Just send inputs here.
+      // Send our inputs to the host (authoritative for ball + opponent)...
       netSendInput();
+      // ...and PREDICT our own slime locally so it responds instantly instead
+      // of waiting a full network round-trip. A slime's motion is fully
+      // deterministic from its own inputs (the ball never moves the slime), so
+      // this runs the exact same step the host will, keeping us in lockstep up
+      // to the latency offset. We resync to the host on each serve (see the
+      // 'state' handler), which bounds any jitter-induced drift to one rally.
+      if(state==='play' && !netPaused){
+        var gl = keys['a']||keys['A']||keys['ArrowLeft'];
+        var gr = keys['d']||keys['D']||keys['ArrowRight'];
+        var gj = keys['w']||keys['W']||keys['ArrowUp']||keys[' '];
+        moveSlime(p2, gl, gr, gj, MOVE);
+      }
     } else if(state==='play' && !netPaused){
       if(netMode === 'host'){
         // Host controls the blue slime locally; pink slime uses the guest's
@@ -1522,10 +1558,12 @@
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].indexOf(e.key)>=0) e.preventDefault();
     keys[e.key] = true;
     if(e.key===' '){ tryServe(); }
+    if(netMode === 'guest') netSendInput(); // fire on the keystroke, don't wait for the next tick
   });
   window.addEventListener('keyup', function(e){
     if(isTypingTarget(e.target)) return;
     keys[e.key] = false;
+    if(netMode === 'guest') netSendInput();
   });
 
   cv.addEventListener('click', function(){ tryServe(); });
@@ -1538,8 +1576,8 @@
   }
   function bindHold(id, key){
     var el = document.getElementById(id);
-    function on(e){ e.preventDefault(); keys[key]=true; tryServe(); }
-    function off(e){ e.preventDefault(); keys[key]=false; }
+    function on(e){ e.preventDefault(); keys[key]=true; tryServe(); if(netMode==='guest') netSendInput(); }
+    function off(e){ e.preventDefault(); keys[key]=false; if(netMode==='guest') netSendInput(); }
     el.addEventListener('touchstart', on, {passive:false});
     el.addEventListener('touchend', off, {passive:false});
     el.addEventListener('mousedown', on);
@@ -1566,10 +1604,12 @@
       var dead = r * 0.22;
       keys['a'] = x < -dead;
       keys['d'] = x > dead;
+      if(netMode==='guest') netSendInput();
     }
     function release(){
       knob.style.transform = '';
       keys['a'] = false; keys['d'] = false;
+      if(netMode==='guest') netSendInput();
       base.classList.remove('active');
       activeTouchId = null;
       usingMouse = false;
