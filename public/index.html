@@ -115,6 +115,24 @@
   #pingbox .ping-val.good{ color:#5dd663; }
   #pingbox .ping-val.ok{   color:#f4b73e; }
   #pingbox .ping-val.bad{  color:#e8537f; }
+  /* Volume panel, bottom-right of the court; only shown while music is on. */
+  #volctl{
+    position:absolute; right:12px; bottom:12px; z-index:3;
+    display:none; flex-direction:column; gap:6px;
+    background:rgba(27,32,48,0.7); border:2px solid rgba(255,255,255,0.25);
+    border-radius:8px; padding:8px 10px;
+    font-family:'PixelBold', monospace; font-size:9px; letter-spacing:1px; color:#cfd6e4;
+  }
+  #volctl.show{ display:flex; }
+  #volctl .vol-row{ display:flex; align-items:center; gap:8px; justify-content:space-between; }
+  #volctl .vol-row span{ flex:0 0 auto; white-space:nowrap; } /* hug the label, don't overflow the slider */
+  #volctl input[type=range]{ width:96px; height:16px; cursor:pointer; accent-color:#4aa3ff; flex:0 0 auto; }
+  #volctl .vol-toggle{
+    align-self:stretch; font-family:'PixelBold', monospace; font-size:9px; letter-spacing:1px;
+    color:#cfd6e4; background:rgba(255,255,255,0.06); border:1px solid #3a4150;
+    border-radius:6px; padding:5px 8px; cursor:pointer;
+  }
+  #volctl .vol-toggle.on{ color:#5dd663; border-color:#5dd663; }
 
   #stage{ position:relative; width:100%; max-width:750px; }
   /* Positioning context for the court overlays (msg, rematch, ping, pixi). */
@@ -485,6 +503,12 @@
         <button id="rematch-no" type="button">No</button>
       </div>
     </div>
+    <!-- Volume panel: shown in the bottom-right while music is on. -->
+    <div id="volctl">
+      <button id="musictoggle" type="button" class="vol-toggle">Music: Off</button>
+      <label class="vol-row"><span>Music</span><input id="vol-music" type="range" min="0" max="100" step="5" aria-label="Music volume"></label>
+      <label class="vol-row"><span>SFX</span><input id="vol-sfx" type="range" min="0" max="100" step="5" aria-label="Sound effects volume"></label>
+    </div>
     </div><!-- /#court -->
   </div>
 
@@ -614,7 +638,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.7.1</footer>
+  <footer id="version">Slime Volleyball v1.7.2</footer>
 
 <script>
 (function(){
@@ -688,6 +712,15 @@
   // Side walls absorb some horizontal speed on each bounce, so a hard spike to
   // the far wall can't rebound all the way back across the court.
   var WALL_BOUNCE = 0.7;
+
+  // Bounce SFX counters: the deterministic sim bumps bounceSeq on every ball
+  // contact (slime/wall/net/floor) and bouncePlayerSeq only on slime hits. Both
+  // are part of the saved game state so rollback replays restore them instead of
+  // double-counting; draw() compares them once per render frame (replays never
+  // reach draw()), plays at most one cue, and picks the volume by whether the
+  // new contact included a player hit (surfaces play at half).
+  var bounceSeq = 0, _lastBounceShown = 0;
+  var bouncePlayerSeq = 0, _lastPlayerShown = 0;
 
   var p1, p2, ball, scores, state, server, twoPlayer=false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
@@ -1028,6 +1061,7 @@
     // surface. (Previously the velocity was always rewritten, which nudged the
     // ball even when it was already leaving — a source of erratic bounces.)
     if(vn < 0){
+      bounceSeq++; bouncePlayerSeq++; // ball struck the slime's dome (full volume)
       // Classic slime-volleyball bounce: launch the ball RADIALLY out from the
       // slime's center through the contact point, at the incoming relative
       // speed. This is what makes returns predictable — the direction is set by
@@ -1075,6 +1109,7 @@
     // Ball center driven inside the net column (deep penetration): eject along
     // the shallowest of up / left / right, preferring up so it clears the net.
     if(ball.x > nl && ball.x < nr && ball.y > ntop){
+      bounceSeq++; // ball ejected out of the net column
       var toUp = ball.y - (ntop - r), toLeft = ball.x - (nl - r), toRight = (nr + r) - ball.x;
       if(toUp <= toLeft && toUp <= toRight){
         ball.y = ntop - r; if(ball.vy > 0) ball.vy = -Math.abs(ball.vy) * 0.8;
@@ -1096,6 +1131,7 @@
     ball.x = qx + nx*r; ball.y = qy + ny*r;
     var vn = ball.vx*nx + ball.vy*ny;
     if(vn < 0){
+      bounceSeq++; // ball bounced off a net face/cap
       ball.vx -= 2*vn*nx;
       ball.vy -= 2*vn*ny;
       if(ny < -0.5) ball.vy *= 0.8; // landing on the top cap: damp like before
@@ -1114,13 +1150,14 @@
     for(var i=0; i<steps; i++){
       ball.x += stepX;
       ball.y += stepY;
-      if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx)*WALL_BOUNCE; }
-      if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx)*WALL_BOUNCE; }
+      if(ball.x < FIELD_L + ball.r){ ball.x = FIELD_L + ball.r; ball.vx = Math.abs(ball.vx)*WALL_BOUNCE; bounceSeq++; }
+      if(ball.x > FIELD_R - ball.r){ ball.x = FIELD_R - ball.r; ball.vx = -Math.abs(ball.vx)*WALL_BOUNCE; bounceSeq++; }
       collideSlime(p1);
       collideSlime(p2);
       collideNet(); // after the slimes: the net gets the final say, so it can't be shoved through
       if(ball.y >= GROUND - ball.r){
         ball.y = GROUND - ball.r;
+        bounceSeq++; // ball thuds on the floor
         ball.live = false;
         if(ball.x < netX) scorePoint('p2'); else scorePoint('p1');
         return;
@@ -1299,7 +1336,7 @@
   // Near rooftop (brick buildings, fence, floor) drawn in front of the clouds.
   function drawCityFg(){
     if(cityFgReady){
-      var r = cityRect(cityFgImg, 20); // foreground sits 20px higher than the skyline
+      var r = cityRect(cityFgImg, 10); // foreground sits 10px higher than the skyline
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(cityFgImg, 0, r.y, W, r.h);
       ctx.imageSmoothingEnabled = false;
@@ -1323,6 +1360,12 @@
   }
 
   function draw(){
+    // Bounce SFX: the sim recorded one or more new ball contacts since the last
+    // rendered frame — play a single cue. (Rollback replays advance bounceSeq but
+    // never call draw(), and it's restored on rollback, so there's no echo.)
+    if(bounceSeq > _lastBounceShown) playBounce(bouncePlayerSeq > _lastPlayerShown);
+    _lastBounceShown = bounceSeq;
+    _lastPlayerShown = bouncePlayerSeq;
     if(theme === 'city'){
       drawCityBg();
     } else {
@@ -1543,14 +1586,14 @@
       p1:{x:p1.x, y:p1.y, vx:p1.vx, vy:p1.vy, g:p1.onGround},
       p2:{x:p2.x, y:p2.y, vx:p2.vx, vy:p2.vy, g:p2.onGround},
       ball:{x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy, live:ball.live},
-      a:scores.p1, b:scores.p2, sv:server, st:state
+      a:scores.p1, b:scores.p2, sv:server, st:state, bs:bounceSeq, bps:bouncePlayerSeq
     };
   }
   function setGameState(s){
     p1.x=s.p1.x; p1.y=s.p1.y; p1.vx=s.p1.vx; p1.vy=s.p1.vy; p1.onGround=s.p1.g;
     p2.x=s.p2.x; p2.y=s.p2.y; p2.vx=s.p2.vx; p2.vy=s.p2.vy; p2.onGround=s.p2.g;
     ball.x=s.ball.x; ball.y=s.ball.y; ball.vx=s.ball.vx; ball.vy=s.ball.vy; ball.live=s.ball.live;
-    scores.p1=s.a; scores.p2=s.b; server=s.sv; state=s.st;
+    scores.p1=s.a; scores.p2=s.b; server=s.sv; state=s.st; bounceSeq=s.bs||0; bouncePlayerSeq=s.bps||0;
   }
 
   // One deterministic tick. inA drives p1 (blue), inB drives p2 (pink).
@@ -2131,28 +2174,101 @@
     netLeave(); // tells the server, clears the saved room, then reloads to offline
   });
 
-  // Background music toggle (sound icon in the controls row). Off by default —
-  // browsers block autoplay, and the choice is remembered. Plays public/BGM-1.mp3.
+  // Ball bounce SFX: four short variants picked at random per bounce. We play a
+  // fresh clone of the chosen variant each time so quick successive bounces can
+  // overlap instead of cutting one another off. draw() calls playBounce() at most
+  // once per render frame (see bounceSeq), so this never machine-guns.
+  // Audio gains (0..1). sfxVol is the player-hit volume; surfaces play at a
+  // quarter of it (see playBounce). Both are derived from the volume panel's
+  // slider positions (see posToGain) and recomputed there on startup.
+  var bgmVol = 0.15, sfxVol = 1.0;
+  var BOUNCE_SRCS = ['Bounce-1.mp3','Bounce-2.mp3','Bounce-3.mp3','Bounce-4.mp3'];
+  var bounceAudio = BOUNCE_SRCS.map(function(s){ var a = new Audio(s); a.preload = 'auto'; return a; });
+  var _lastBounceAt = -1e9;
+  function playBounce(onPlayer){
+    // One hit can register on two consecutive frames (the slime pushing into the
+    // ball as it launches), which would double the cue. Treat bounces within
+    // ~60ms as the same contact and play only the first; real rally bounces are
+    // far further apart, so they still each sound.
+    var now = (window.performance ? performance.now() : Date.now());
+    var fresh = (now - _lastBounceAt) > 60;
+    _lastBounceAt = now;
+    if(!fresh) return;
+    var base = bounceAudio[(Math.random()*bounceAudio.length)|0];
+    var a = base.cloneNode();
+    a.volume = sfxVol * (onPlayer ? 1 : 0.25); // surfaces (wall/net/floor) at 25%
+    var p = a.play(); if(p && p.catch) p.catch(function(){}); // ignore autoplay blocks
+  }
+
+  // Volume panel (bottom-right of the court): opened/closed by the controls-row
+  // sound icon; it holds the music on/off switch (wired below) plus these two
+  // level sliders. Both knobs sit dead-centre (50) by DEFAULT so they look
+  // balanced, even though the gains differ. posToGain maps a slider position
+  // through that centre default: the left half fades to silence, the right half
+  // rises to full (1.0). So music's centre is 15% with room to go louder, while
+  // SFX's centre is already full (its right half just stays at full). We remember
+  // the slider POSITIONS, not the gains.
+  var MUSIC_DEF = 0.15, SFX_DEF = 1.0; // gain at the centre (50) slider position
+  function posToGain(pos, def){
+    pos = Math.max(0, Math.min(100, pos));
+    return pos <= 50 ? def * (pos / 50) : def + (1 - def) * ((pos - 50) / 50);
+  }
+  var bgmPos = 50, sfxPos = 50;
+  try{ var _bp = parseInt(localStorage.getItem('slimeBgmPos'), 10); if(_bp >= 0 && _bp <= 100) bgmPos = _bp; }catch(e){}
+  try{ var _sp = parseInt(localStorage.getItem('slimeSfxPos'), 10); if(_sp >= 0 && _sp <= 100) sfxPos = _sp; }catch(e){}
+  bgmVol = posToGain(bgmPos, MUSIC_DEF);
+  sfxVol = posToGain(sfxPos, SFX_DEF);
+  var volPanel = document.getElementById('volctl');
+  var bgmSlider = document.getElementById('vol-music');
+  var sfxSlider = document.getElementById('vol-sfx');
+  function applyBgmVol(){ var a = document.getElementById('bgmusic'); if(a) a.volume = bgmVol; }
+  function setVolPanel(on){ if(volPanel) volPanel.classList.toggle('show', !!on); }
+  if(bgmSlider){
+    bgmSlider.value = bgmPos;
+    bgmSlider.addEventListener('input', function(){
+      bgmPos = parseInt(bgmSlider.value, 10) || 0;
+      bgmVol = posToGain(bgmPos, MUSIC_DEF);
+      try{ localStorage.setItem('slimeBgmPos', bgmPos); }catch(e){}
+      applyBgmVol();
+    });
+  }
+  if(sfxSlider){
+    sfxSlider.value = sfxPos;
+    sfxSlider.addEventListener('input', function(){
+      sfxPos = parseInt(sfxSlider.value, 10) || 0;
+      sfxVol = posToGain(sfxPos, SFX_DEF);
+      try{ localStorage.setItem('slimeSfxPos', sfxPos); }catch(e){}
+    });
+    sfxSlider.addEventListener('change', function(){ playBounce(true); }); // preview on release
+  }
+
+  // Sound: the controls-row icon opens/closes the volume overlay; the music
+  // on/off switch lives inside that overlay alongside the level sliders. Music is
+  // off by default (browsers block autoplay) and the choice is remembered.
   (function(){
-    var btn = document.getElementById('musicbtn'), audio = document.getElementById('bgmusic');
-    if(!btn || !audio) return;
-    audio.volume = 0.5;
-    var on = false;
+    var icon = document.getElementById('musicbtn');      // opens/closes the overlay
+    var toggle = document.getElementById('musictoggle');  // the music on/off switch (in the overlay)
+    var audio = document.getElementById('bgmusic');
+    if(!icon || !audio) return;
+    applyBgmVol();
+    var on = false, open = false;
     try{ on = localStorage.getItem('slimeMusic') === 'on'; }catch(e){}
-    function apply(){
-      btn.classList.toggle('music-off', !on);
+    function applyMusic(){
+      icon.classList.toggle('music-off', !on); // the icon still reflects the muted state
+      if(toggle){ toggle.textContent = on ? 'Music: On' : 'Music: Off'; toggle.classList.toggle('on', on); }
       if(on){ var p = audio.play(); if(p && p.catch) p.catch(function(){}); }
       else { audio.pause(); }
     }
-    btn.addEventListener('click', function(){
+    icon.addEventListener('click', function(){ open = !open; setVolPanel(open); });
+    if(toggle) toggle.addEventListener('click', function(){
       on = !on;
       try{ localStorage.setItem('slimeMusic', on ? 'on' : 'off'); }catch(e){}
-      apply();
+      applyMusic();
     });
-    btn.classList.toggle('music-off', !on);
-    // If it was left on, resume on the first user gesture (autoplay policy).
+    applyMusic();
+    // If music was left on, resume on the first user gesture (autoplay policy).
     if(on){
-      var resume = function(){ apply(); window.removeEventListener('pointerdown', resume); window.removeEventListener('keydown', resume); };
+      var resume = function(){ applyMusic(); window.removeEventListener('pointerdown', resume); window.removeEventListener('keydown', resume); };
       window.addEventListener('pointerdown', resume);
       window.addEventListener('keydown', resume);
     }
