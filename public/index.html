@@ -214,14 +214,15 @@
     position:absolute; left:50%; bottom:8px; transform:translateX(-50%); z-index:1;
     width:90px; height:22px; cursor:pointer; accent-color:#4aa3ff; pointer-events:auto;
   }
-  /* Faint eye toggle above the slider: tap to tuck the slider away and fade the
-     controls to 10%; tap again to bring them back. */
+  /* Faint eye toggle above the slider: tap to hide the slider (and dim the icon,
+     showing a slash); tap again to bring it back. Doesn't touch joystick opacity. */
   #joyopacity-eye{
     position:absolute; left:50%; bottom:34px; transform:translateX(-50%); z-index:1;
     width:24px; height:24px; pointer-events:auto; cursor:pointer; opacity:0.4; color:#cfd6e4;
     display:flex; align-items:center; justify-content:center;
   }
   #joyopacity-eye svg{ width:100%; height:100%; }
+  #joyopacity-eye.off{ opacity:0.2; }
   #joyopacity-eye .eye-slash{ display:none; }
   #joyopacity-eye.off .eye-slash{ display:inline; }
   #joystick-base{
@@ -601,7 +602,7 @@
 
   <div id="touchpad">
     <span id="joyopacity-eye" role="button" tabindex="0" aria-label="Hide controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/><line class="eye-slash" x1="3" y1="3" x2="21" y2="21"/></svg></span>
-    <input id="joyopacity" type="range" min="0" max="100" step="5" value="100" aria-label="Controls opacity">
+    <input id="joyopacity" type="range" min="10" max="100" step="5" value="100" aria-label="Controls opacity">
     <div id="touchpad-joystick">
       <div id="joystick-base" aria-label="Joystick">
         <div id="joystick-knob"></div>
@@ -610,10 +611,10 @@
     </div>
   </div>
 
-  <!-- Background music. Drop your track at public/music.mp3 (loops). -->
-  <audio id="bgmusic" loop preload="none" src="music.mp3"></audio>
+  <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
+  <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.6.0</footer>
+  <footer id="version">Slime Volleyball v1.7.0</footer>
 
 <script>
 (function(){
@@ -636,14 +637,19 @@
   // (the rooftop photo as the backdrop, clouds drifting over it).
   var theme = 'grassy';
   try{ var _st = localStorage.getItem('slimeTheme'); if(_st === 'city' || _st === 'grassy') theme = _st; }catch(e){}
-  var cityImg = new Image();
-  var cityImgReady = false;
-  cityImg.onload = function(){ cityImgReady = true; };
-  cityImg.src = 'city.webp';
-  // Top-of-image sky color (fills the strip above the photo) and the source-image
-  // row of the rooftop floor, so the floor lines up with the game's GROUND.
-  var CITY_SKY = '#078ffc';
-  var CITY_FLOOR_SRC = 700;
+  // Two layered backdrops for the city theme: a far skyline (drawn behind the
+  // clouds) and a near rooftop with brick buildings/fence/floor (drawn in front
+  // of the clouds). Both are the same size and share one destination rect.
+  var cityBgImg = new Image(); var cityBgReady = false;
+  cityBgImg.onload = function(){ cityBgReady = true; };
+  cityBgImg.src = 'City%20Background.webp';
+  var cityFgImg = new Image(); var cityFgReady = false;
+  cityFgImg.onload = function(){ cityFgReady = true; };
+  cityFgImg.src = 'City%20Foreground.webp';
+  // Sky color filling the strip above the artwork (matches the skyline's top)
+  // and the source-image row of the rooftop floor, so it lines up with GROUND.
+  var CITY_SKY = '#018ffc';
+  var CITY_FLOOR_SRC = 687;
 
   // Speeds are scaled to the player's MOVE speed (6.25). react = how tightly
   // the AI tracks (1 = no lag), jumpChance = how eagerly it jumps to hit.
@@ -1269,16 +1275,34 @@
     ctx.drawImage(img, Math.round(b.x*W - sp.w/2), Math.round(baseY - sp.h), sp.w, sp.h);
   }
 
-  // City theme backdrop: the rooftop photo scaled to the court width and
-  // positioned so its rooftop floor sits on the game's GROUND line. The strip
-  // above the photo is filled with the image's own sky color so it's seamless.
+  // City theme backdrops, scaled to the court width and positioned so the
+  // rooftop floor lands on the game's GROUND line (both layers share this rect).
+  function cityRect(img, extraUp){
+    var scale = W / img.naturalWidth;
+    // -20 base nudge for both layers; the foreground lifts an extra amount.
+    return { y: GROUND - CITY_FLOOR_SRC * scale - 20 - (extraUp||0), h: img.naturalHeight * scale };
+  }
+  // Far skyline behind the clouds; the strip above it is filled with the sky
+  // color (matches the artwork's top) so the join is seamless.
   function drawCityBg(){
     ctx.fillStyle = CITY_SKY; ctx.fillRect(0, 0, W, H);
-    if(cityImgReady){
-      var scale = W / cityImg.naturalWidth;
-      var dh = cityImg.naturalHeight * scale;
-      var y0 = GROUND - CITY_FLOOR_SRC * scale - 26; // nudge the backdrop up
-      ctx.drawImage(cityImg, 0, y0, W, dh);
+    if(cityBgReady){
+      var r = cityRect(cityBgImg);
+      // The backdrops are hi-res illustrations downscaled to the court width, so
+      // smooth the scaling (the global default is nearest-neighbour, which keeps
+      // the pixel-art sprites crisp but leaves these edges jagged). Restored after.
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(cityBgImg, 0, r.y, W, r.h);
+      ctx.imageSmoothingEnabled = false;
+    }
+  }
+  // Near rooftop (brick buildings, fence, floor) drawn in front of the clouds.
+  function drawCityFg(){
+    if(cityFgReady){
+      var r = cityRect(cityFgImg, 20); // foreground sits 20px higher than the skyline
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(cityFgImg, 0, r.y, W, r.h);
+      ctx.imageSmoothingEnabled = false;
     }
   }
 
@@ -1307,8 +1331,11 @@
       sky.addColorStop(1, SKY_BOT);
       ctx.fillStyle = sky; ctx.fillRect(0,0,W,GROUND);
     }
-    // clouds drift over both themes (behind everything but the sky/backdrop)
+    // clouds drift over both themes; in the city they sit between the two layers
     for(var c=0;c<CLOUDS.length;c++){ drawCloud(CLOUDS[c]); }
+    if(theme === 'city'){
+      drawCityFg(); // near rooftop (buildings/fence/floor), in front of the clouds
+    }
     if(theme !== 'city'){
       // bushes at the back of the ground plane (drawn before the court so the
       // court surface overlaps their bottoms)
@@ -2068,20 +2095,21 @@
   })();
 
   // Controls opacity: the slider fades the joystick + JUMP button so they don't
-  // block the view of the court. The eye taps between "shown" (follow the slider)
-  // and "hidden" (slider tucked away, controls dropped to 10%). Both remembered.
+  // block the view of the court. The eye is a separate toggle that only hides the
+  // slider itself (and dims its own icon) — it never touches the joystick opacity.
+  // Both the slider value and the hidden state are remembered.
   var joyEl = document.getElementById('touchpad-joystick');
   var opacityInput = document.getElementById('joyopacity');
   var eyeBtn = document.getElementById('joyopacity-eye');
   var joyOpacity = 100;
   var joyHidden = false;
-  try{ var jo = parseInt(localStorage.getItem('slimeJoyOpacity'), 10); if(jo >= 0 && jo <= 100) joyOpacity = jo; }catch(e){}
+  try{ var jo = parseInt(localStorage.getItem('slimeJoyOpacity'), 10); if(jo >= 10 && jo <= 100) joyOpacity = jo; }catch(e){}
   try{ joyHidden = localStorage.getItem('slimeJoyHidden') === '1'; }catch(e){}
   function applyJoyOpacity(){
-    joyEl.style.opacity = (joyHidden ? 0.1 : joyOpacity / 100).toString();
-    opacityInput.style.display = joyHidden ? 'none' : '';
+    joyEl.style.opacity = (joyOpacity / 100).toString(); // joystick follows the slider only
+    opacityInput.style.display = joyHidden ? 'none' : ''; // eye hides/shows the slider
     opacityInput.value = joyOpacity;
-    eyeBtn.classList.toggle('off', joyHidden);
+    eyeBtn.classList.toggle('off', joyHidden);            // dims the icon + shows the slash
   }
   applyJoyOpacity();
   opacityInput.addEventListener('input', function(){
@@ -2103,8 +2131,8 @@
     netLeave(); // tells the server, clears the saved room, then reloads to offline
   });
 
-  // Background music toggle (bottom-right). Off by default — browsers block
-  // autoplay, and the choice is remembered. Looks for public/music.mp3.
+  // Background music toggle (sound icon in the controls row). Off by default —
+  // browsers block autoplay, and the choice is remembered. Plays public/BGM-1.mp3.
   (function(){
     var btn = document.getElementById('musicbtn'), audio = document.getElementById('bgmusic');
     if(!btn || !audio) return;
