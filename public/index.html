@@ -638,7 +638,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.7.3</footer>
+  <footer id="version">Slime Volleyball v1.8.0</footer>
 
 <script>
 (function(){
@@ -657,10 +657,10 @@
   var CLOUD = '#ffffff', CLOUD_SHADE = '#dfeefb';
   var NETCOL = '#f4f4f4';
 
-  // Environment theme: 'grassy' (the painted green court, default) or 'city'
-  // (the rooftop photo as the backdrop, clouds drifting over it).
+  // Environment theme: 'grassy' (the painted green court, default), 'city' (the
+  // rooftop backdrop with drifting clouds), or 'beach' (a sunny beach court).
   var theme = 'grassy';
-  try{ var _st = localStorage.getItem('slimeTheme'); if(_st === 'city' || _st === 'grassy') theme = _st; }catch(e){}
+  try{ var _st = localStorage.getItem('slimeTheme'); if(_st === 'city' || _st === 'grassy' || _st === 'beach') theme = _st; }catch(e){}
   // Two layered backdrops for the city theme: a far skyline (drawn behind the
   // clouds) and a near rooftop with brick buildings/fence/floor (drawn in front
   // of the clouds). Both are the same size and share one destination rect.
@@ -674,6 +674,13 @@
   // and the source-image row of the rooftop floor, so it lines up with GROUND.
   var CITY_SKY = '#018ffc';
   var CITY_FLOOR_SRC = 687;
+  // Beach theme: a single full-scene backdrop (sky, sea, sandy court), scaled to
+  // the court width and positioned so the sand court's front line sits on GROUND.
+  var beachImg = new Image(); var beachReady = false;
+  beachImg.onload = function(){ beachReady = true; };
+  beachImg.src = 'Beach_volleyball.webp';
+  var BEACH_SKY = '#068cfc';     // fills any strip above the artwork (matches its top)
+  var BEACH_FLOOR_SRC = 828;     // source row of the court's front line
 
   // Speeds are scaled to the player's MOVE speed (6.25). react = how tightly
   // the AI tracks (1 = no lag), jumpChance = how eagerly it jumps to hit.
@@ -1189,9 +1196,9 @@
       col = flashOn ? s.col : '#ffe14d';
       outline = flashOn ? darken(s.cold, 0.7) : '#6e5a00';
     }
-    // Cast shadow + lit shading only in the city theme (light from the upper
+    // Cast shadow + lit shading in the outdoor photo themes (light from the upper
     // left). The default grassy theme keeps the flat, shadow-free look.
-    if(theme === 'city'){
+    if(theme === 'city' || theme === 'beach'){
       var hAbove = GROUND - s.y;
       var sc = Math.max(0.45, 1 - hAbove/420);
       var shX = s.x + s.r*0.35; // shadow to the lower-right
@@ -1210,7 +1217,7 @@
     ctx.fill();
     // Inner shading clipped to the dome: a soft highlight at the upper-left and
     // a shadow toward the lower-right, selling a single upper-left light source.
-    if(theme === 'city'){
+    if(theme === 'city' || theme === 'beach'){
       ctx.save();
       ctx.clip();
       var hi = ctx.createRadialGradient(s.x - s.r*0.45, s.y - s.r*0.65, s.r*0.05,
@@ -1342,6 +1349,18 @@
       ctx.imageSmoothingEnabled = false;
     }
   }
+  // Beach backdrop: one full-scene image scaled to the court width, positioned so
+  // the sand court's front line lands on GROUND. Smoothed like the city art.
+  function drawBeach(){
+    ctx.fillStyle = BEACH_SKY; ctx.fillRect(0, 0, W, H);
+    if(beachReady){
+      var scale = W / beachImg.naturalWidth;
+      var y = GROUND - BEACH_FLOOR_SRC * scale + 16; // nudged 16px down
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(beachImg, 0, y, W, beachImg.naturalHeight * scale);
+      ctx.imageSmoothingEnabled = false;
+    }
+  }
 
   // Draw the ball. The DRAWN radius can be scaled by a ball skin, but ball.r
   // (used by all the physics) is untouched, so collisions never change.
@@ -1368,18 +1387,21 @@
     _lastPlayerShown = bouncePlayerSeq;
     if(theme === 'city'){
       drawCityBg();
+    } else if(theme === 'beach'){
+      drawBeach();
     } else {
       var sky = ctx.createLinearGradient(0, 0, 0, GROUND);
       sky.addColorStop(0, SKY_TOP);
       sky.addColorStop(1, SKY_BOT);
       ctx.fillStyle = sky; ctx.fillRect(0,0,W,GROUND);
     }
-    // clouds drift over both themes; in the city they sit between the two layers
-    for(var c=0;c<CLOUDS.length;c++){ drawCloud(CLOUDS[c]); }
+    // drifting clouds over the grassy sky and between the city's two layers; the
+    // beach backdrop has its own painted clouds, so skip them there.
+    if(theme !== 'beach'){ for(var c=0;c<CLOUDS.length;c++){ drawCloud(CLOUDS[c]); } }
     if(theme === 'city'){
       drawCityFg(); // near rooftop (buildings/fence/floor), in front of the clouds
     }
-    if(theme !== 'city'){
+    if(theme === 'grassy'){
       // bushes at the back of the ground plane (drawn before the court so the
       // court surface overlaps their bottoms)
       for(var b=0;b<BUSHES.length;b++){ drawBush(BUSHES[b]); }
@@ -1390,13 +1412,19 @@
       ctx.fillStyle = 'rgba(255,255,255,0.18)';
       ctx.fillRect(0,0,WALL,GROUND); ctx.fillRect(W-WALL,0,WALL,GROUND);
     }
-    ctx.fillStyle = NETCOL;
-    ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H);
     flashT++;
     // Online: both peers run the real sim, so p1/p2/ball are already the true
     // current simulated state — drawn directly (rollback corrects them in-sim).
     drawSlime(p1);
     drawSlime(p2);
+    // Net drawn AFTER the slimes so it sits above their cast shadows (the shadow
+    // ellipse spreads onto the net's base). Slimes are clamped to just touch the
+    // bar, so their bodies never overlap it; the ball draws last, in front.
+    ctx.fillStyle = NETCOL;
+    // Beach sits ~16px lower, so draw the net 17px deeper to plant it in the sand.
+    // Purely cosmetic — the collision box (GROUND-NET_H..GROUND) is unchanged.
+    var netExtra = (theme === 'beach') ? 17 : 0;
+    ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H + netExtra);
     drawBall();
   }
 
@@ -2307,10 +2335,11 @@
     }
   })();
   var themeBtn = document.getElementById('themebtn');
-  function applyTheme(){ themeBtn.textContent = 'Theme: ' + (theme === 'city' ? 'City' : 'Grassy'); }
+  var THEMES = ['grassy', 'city', 'beach'];
+  function applyTheme(){ themeBtn.textContent = 'Theme: ' + theme.charAt(0).toUpperCase() + theme.slice(1); }
   applyTheme();
   themeBtn.addEventListener('click', function(){
-    theme = (theme === 'grassy') ? 'city' : 'grassy';
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; // cycle grassy -> city -> beach
     try{ localStorage.setItem('slimeTheme', theme); }catch(e){}
     applyTheme();
   });
