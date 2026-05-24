@@ -638,7 +638,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.7.2</footer>
+  <footer id="version">Slime Volleyball v1.7.3</footer>
 
 <script>
 (function(){
@@ -2174,16 +2174,45 @@
     netLeave(); // tells the server, clears the saved room, then reloads to offline
   });
 
-  // Ball bounce SFX: four short variants picked at random per bounce. We play a
-  // fresh clone of the chosen variant each time so quick successive bounces can
-  // overlap instead of cutting one another off. draw() calls playBounce() at most
-  // once per render frame (see bounceSeq), so this never machine-guns.
   // Audio gains (0..1). sfxVol is the player-hit volume; surfaces play at a
   // quarter of it (see playBounce). Both are derived from the volume panel's
   // slider positions (see posToGain) and recomputed there on startup.
   var bgmVol = 0.15, sfxVol = 1.0;
+
+  // Ball bounce SFX via the Web Audio API. HTMLAudio's play() has noticeable
+  // start latency (decode/buffer), which made the hit sound lag the contact; we
+  // decode the four variants into buffers once, then fire a one-shot buffer
+  // source on each hit, which starts essentially instantly. draw() calls
+  // playBounce() at most once per render frame (see bounceSeq), so it never
+  // machine-guns. A new source per hit also lets quick bounces overlap.
   var BOUNCE_SRCS = ['Bounce-1.mp3','Bounce-2.mp3','Bounce-3.mp3','Bounce-4.mp3'];
-  var bounceAudio = BOUNCE_SRCS.map(function(s){ var a = new Audio(s); a.preload = 'auto'; return a; });
+  var audioCtx = null, bounceBufs = [];
+  try{
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(AC){
+      audioCtx = new AC();
+      BOUNCE_SRCS.forEach(function(src, i){
+        fetch(src).then(function(r){ return r.arrayBuffer(); })
+          .then(function(b){ return audioCtx.decodeAudioData(b); })
+          .then(function(buf){ bounceBufs[i] = buf; })
+          .catch(function(){});
+      });
+    }
+  }catch(e){ audioCtx = null; }
+  // Browsers start the context suspended until a user gesture; resume on the
+  // first one (the serve tap/keypress already qualifies).
+  (function(){
+    if(!audioCtx) return;
+    var unlock = function(){
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('touchstart', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('touchstart', unlock, {passive:true});
+  })();
   var _lastBounceAt = -1e9;
   function playBounce(onPlayer){
     // One hit can register on two consecutive frames (the slime pushing into the
@@ -2193,11 +2222,15 @@
     var now = (window.performance ? performance.now() : Date.now());
     var fresh = (now - _lastBounceAt) > 60;
     _lastBounceAt = now;
-    if(!fresh) return;
-    var base = bounceAudio[(Math.random()*bounceAudio.length)|0];
-    var a = base.cloneNode();
-    a.volume = sfxVol * (onPlayer ? 1 : 0.25); // surfaces (wall/net/floor) at 25%
-    var p = a.play(); if(p && p.catch) p.catch(function(){}); // ignore autoplay blocks
+    if(!fresh || !audioCtx || audioCtx.state !== 'running') return;
+    var ready = bounceBufs.filter(Boolean);
+    if(!ready.length) return;
+    var src = audioCtx.createBufferSource();
+    src.buffer = ready[(Math.random()*ready.length)|0];
+    var g = audioCtx.createGain();
+    g.gain.value = sfxVol * (onPlayer ? 1 : 0.25); // surfaces (wall/net/floor) at 25%
+    src.connect(g); g.connect(audioCtx.destination);
+    src.start(0);
   }
 
   // Volume panel (bottom-right of the court): opened/closed by the controls-row
