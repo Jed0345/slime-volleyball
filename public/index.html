@@ -68,7 +68,7 @@
     background:#e8537f; color:#fff; border:3px solid #7a1f3a;
     box-shadow:inset 0 0 0 2px #f08aab; text-shadow:1px 1px 0 rgba(0,0,0,0.3);
   }
-  #sv-board .dotrow{ display:flex; gap:5px; flex-wrap:nowrap; flex-shrink:0; }
+  #sv-board .dotrow{ display:flex; gap:5px; flex-wrap:wrap; flex-shrink:0; max-width:164px; }
   #sv-board .dotrow.left{ justify-content:flex-end; }
   #sv-board .dotrow.right{ justify-content:flex-start; }
   #sv-board .dot{
@@ -102,7 +102,7 @@
 
   /* Latency indicator, top-left of the court (online only). */
   #pingbox{
-    position:absolute; top:12px; left:12px; z-index:2; pointer-events:none;
+    position:absolute; top:44px; left:16px; z-index:2; pointer-events:none;
     display:none; flex-direction:column; gap:3px;
     font-family:'PixelBold', monospace; font-size:9px; letter-spacing:1px;
     background:rgba(27,32,48,0.55); border:2px solid rgba(255,255,255,0.25);
@@ -638,7 +638,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.8.0</footer>
+  <footer id="version">Slime Volleyball v1.8.1</footer>
 
 <script>
 (function(){
@@ -1368,6 +1368,10 @@
     var sk = ballSkin ? ballBossByName(ballSkin) : null;
     var vr = BALL_R * (sk && sk.rmul ? sk.rmul : 1);
     if(sk && sk.style === 'volleyball' && volleyReady){
+      // Dark backing disc so the light emoji reads against bright backdrops; it
+      // peeks out around the ball as an outline.
+      ctx.fillStyle = '#241700';
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 2.5, 0, Math.PI*2); ctx.fill();
       ctx.drawImage(volleyImg, ball.x - vr, ball.y - vr, vr*2, vr*2); // Noto volleyball emoji
       return;
     }
