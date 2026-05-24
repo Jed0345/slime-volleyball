@@ -614,7 +614,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.7.0</footer>
+  <footer id="version">Slime Volleyball v1.7.1</footer>
 
 <script>
 (function(){
@@ -2209,7 +2209,7 @@
 
   // ===================== NOISE OVERLAY =====================
   // Sits above the game (and above the WebGL CRT pass) at all times, adding
-  // fine film grain via `mix-blend-mode: multiply`. If public/noise.png exists
+  // fine film grain via `mix-blend-mode: multiply`. If public/noise.webp exists
   // we use it directly; otherwise we generate a tileable grain pattern at
   // runtime so the page works with zero extra assets.
   (function setupNoise(){
@@ -2230,14 +2230,14 @@
       ov.style.backgroundImage = 'url(' + c.toDataURL() + ')';
       ov.style.backgroundSize  = size + 'px ' + size + 'px';
     }
-    // Prefer a real PNG asset if the user dropped one in.
+    // Prefer the real grain asset if it's present.
     var probe = new Image();
     probe.onload  = function(){
-      ov.style.backgroundImage = 'url(noise.png)';
+      ov.style.backgroundImage = 'url(noise.webp)';
       ov.style.backgroundSize  = 'auto';
     };
     probe.onerror = generate;
-    probe.src = 'noise.png';
+    probe.src = 'noise.webp';
   })();
   // =================== END NOISE OVERLAY ===================
 
