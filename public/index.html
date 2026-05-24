@@ -50,7 +50,10 @@
   #sv-board .lbl{ white-space:nowrap; }
   /* Online guest: reverse the row AND each half so this player sits on the left
      with their name still on the outer edge, matching the flipped court. */
-  #sv-board.mirror .score-row, #sv-board.mirror .namescore{ flex-direction:row-reverse; }
+  #sv-board.mirror .score-row, #sv-board.mirror .namescore, #sv-board.mirror .scoregroup{ flex-direction:row-reverse; }
+  /* ...and swap the dot-row alignment so the wrapped dots still pack toward the score. */
+  #sv-board.mirror .dotrow.left{ justify-content:flex-start; }
+  #sv-board.mirror .dotrow.right{ justify-content:flex-end; }
   #sv-board .vs{ font-size:12px; color:#cfd6e4; padding:0 12px; white-space:nowrap;
     text-shadow:2px 2px 0 rgba(0,0,0,0.45); }
   #sv-board .lbl{ font-size:11px; color:#fff; letter-spacing:1px; text-shadow:2px 2px 0 rgba(0,0,0,0.45); }
@@ -205,6 +208,9 @@
   }
   button:hover{ background:#262c3b; }
   button:active{ transform:scale(0.97); }
+  /* Code input + Join are disabled while you're hosting a room you created. */
+  #codeinput:disabled, #joinbtn:disabled{ opacity:0.45; cursor:not-allowed; }
+  #codeinput:disabled:hover, #joinbtn:disabled:hover{ background:transparent; }
 
   /* The container ignores touches in its empty areas (so faded/empty space never
      blocks the court); only the interactive controls below opt back in. */
@@ -638,7 +644,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.8.1</footer>
+  <footer id="version">Slime Volleyball v1.8.2</footer>
 
 <script>
 (function(){
@@ -2370,15 +2376,25 @@
   });
 
   // Lobby wiring
+  // While hosting a room you created, you can't also join another — disable the
+  // code field + Join button. Reset (re-enable) whenever the lobby opens fresh.
+  function setLobbyCreating(creating){
+    var ci = document.getElementById('codeinput'), jb = document.getElementById('joinbtn');
+    if(ci) ci.disabled = creating;
+    if(jb) jb.disabled = creating;
+  }
   document.getElementById('onlinebtn').addEventListener('click', function(){
     var lob = document.getElementById('lobby');
-    lob.style.display = (lob.style.display === 'none') ? 'block' : 'none';
+    var opening = (lob.style.display === 'none');
+    lob.style.display = opening ? 'block' : 'none';
+    if(opening) setLobbyCreating(false);
     lobbyStatus('');
   });
   document.getElementById('lobbyclose').addEventListener('click', function(){
     document.getElementById('lobby').style.display = 'none';
   });
   document.getElementById('createbtn').addEventListener('click', function(){
+    setLobbyCreating(true); // hosting this room — can't also join another
     lobbyStatus('Connecting...'); netCreate();
   });
   document.getElementById('joinbtn').addEventListener('click', function(){
