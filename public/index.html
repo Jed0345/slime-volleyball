@@ -644,7 +644,7 @@
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.8.2</footer>
+  <footer id="version">Slime Volleyball v1.9.0</footer>
 
 <script>
 (function(){
@@ -699,6 +699,9 @@
     {name:'Big Blue Boss',col:'#2a55d6', cold:'#16307e', react:0.85, speed:6.5,  jumpChance:0.88, rmul:1.55, flash:false}
   ];
   var oppIdx = 0;
+  // Single-player gauntlet: set when the player beats a boss, so the next serve
+  // after the win screen advances to the next boss instead of replaying this one.
+  var advanceToNextBoss = false;
 
   var GRAV = 1.38;
   var MOVE = 6.25;
@@ -852,6 +855,7 @@
     scores = {p1:0, p2:0};
     server = 'p1';
     state = 'menu';
+    advanceToNextBoss = false;
     setWin(DEFAULT_WIN); // offline always plays to the default; also (re)renders the "FIRST TO N" label from WIN
     resetPositions(server);
     updateScore();
@@ -944,7 +948,15 @@
 
   function startPoint(){
     if(state==='menu' || state==='point' || state==='gameover'){
-      if(state==='gameover'){ scores={p1:0,p2:0}; if(!simReplaying) updateScore(); }
+      if(state==='gameover'){
+        if(advanceToNextBoss){
+          advanceToNextBoss = false;
+          oppIdx++;       // move on to the next boss in the gauntlet
+          init();         // rebuild against the new boss (resets scores, state='menu', server='p1')
+        } else {
+          scores={p1:0,p2:0}; if(!simReplaying) updateScore();
+        }
+      }
       resetPositions(server);
       ball.live = true;
       state = 'play';
@@ -975,7 +987,17 @@
     updateScore();
     if(state === 'gameover'){
       var label = (who==='p1') ? 'BLUE<br>WINS!' : (twoPlayer ? 'PINK<br>WINS!' : nameFor(who)+'<br>WINS');
-      setMsg(label, netMode ? '' : 'PRESS SPACE OR TAP');
+      var sub = netMode ? '' : 'PRESS SPACE OR TAP';
+      // Single-player gauntlet: beating a boss advances you to the next one.
+      if(!netMode && !twoPlayer && who === 'p1'){
+        if(oppIdx < OPPS.length - 1){
+          advanceToNextBoss = true;
+          sub = 'NEXT: ' + OPPS[oppIdx+1].name.toUpperCase() + '<br>PRESS SPACE OR TAP';
+        } else {
+          label = 'YOU BEAT<br>ALL BOSSES!';
+        }
+      }
+      setMsg(label, sub);
       if(netMode) onEnterGameOver();
     } else {
       setMsg(nameFor(who)+'<br>SCORES', 'PRESS SPACE OR TAP');

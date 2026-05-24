@@ -1,6 +1,6 @@
 {
   "name": "slime-volleyball-multiplayer",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Slime Volleyball with online multiplayer via a WebSocket relay.",
   "main": "server.js",
   "scripts": {
