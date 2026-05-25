@@ -33,6 +33,33 @@
     padding:24px 12px; gap:12px;
   }
 
+  /* Top navbar: white-slime logo on the left, Discord CTA on the right. */
+  #navbar{
+    width:100%; max-width:750px;   /* match the game width, centered by the body */
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:8px 14px;
+  }
+  .nav-logo{ display:inline-flex; align-items:center; gap:10px; }
+  .nav-slime{ width:36px; height:25px; display:block; flex:none; }
+  .nav-title{
+    font-family:'PixelTitle','PixelBold',monospace; font-size:19px;
+    letter-spacing:1px; color:#e8ecf4; white-space:nowrap;
+  }
+  .nav-discord{
+    display:inline-flex; align-items:center; gap:8px;
+    background:#5865F2; color:#fff; text-decoration:none;
+    font-family:'PixelBold', monospace; font-size:10px; letter-spacing:0.5px;
+    padding:9px 14px; border-radius:10px; border:1px solid #4752c4;
+    transition:background 0.15s ease;
+  }
+  .nav-discord:hover{ background:#4752c4; }
+  .nav-discord svg{ width:18px; height:18px; fill:currentColor; flex:none; order:1; } /* icon after the text */
+  @media (max-width:480px){
+    .nav-title{ display:none; }          /* logo-only on narrow screens */
+    .nav-discord-text{ display:none; }   /* icon-only CTA */
+    .nav-discord{ padding:9px 11px; }
+  }
+
   #sv-board{
     position:absolute; top:0; left:10px; right:10px; z-index:3;
     display:flex; flex-direction:column; align-items:center; gap:10px;
@@ -505,6 +532,21 @@
 </head>
 <body>
 
+  <nav id="navbar">
+    <span class="nav-logo" aria-label="Slime Volleyball 2">
+      <svg class="nav-slime" viewBox="0 3 40 28" role="img" aria-hidden="true">
+        <path d="M2 26 A18 18 0 0 1 38 26 Z" fill="#f3f3f3" stroke="#5f5f5f" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="27.5" cy="16" r="3.4" fill="#fff" stroke="#5f5f5f" stroke-width="1.6"/>
+        <circle cx="28.7" cy="16" r="1.5" fill="#3a3a3a"/>
+      </svg>
+      <span class="nav-title">SLIME VOLLEYBALL 2</span>
+    </span>
+    <a class="nav-discord" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join us on Discord">
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+      <span class="nav-discord-text">Join us</span>
+    </a>
+  </nav>
+
   <div id="stage" data-filter="off">
     <div id="sv-board">
       <div class="score-row">
@@ -690,7 +732,7 @@
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
   <footer id="version">
-    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.13.0</span>
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.14.0</span>
     <span id="footer-social">
       <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
       <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
@@ -813,8 +855,9 @@
   var SPIKE_COOLDOWN = 40;            // frames before the same slime can spike again
   var SPIKE_FX_FRAMES = 16;           // spike flash duration (visual only, not sim)
   var SPIKE_TRAIL_FRAMES = 30;        // how long the wave trail streams off a spike
-  var SPIKE_GHOST_FRAMES = 20;        // after-image lifetime: stepped slime trail of the leap
-  var SPIKE_GHOST_STEPS  = 5;         // number of ghost silhouettes along that trail
+  var SPIKE_GHOST_FRAMES = 20;        // after-image lifetime (frames) of the blended shadow trail
+  var SPIKE_GHOST_STEPS  = 8;         // minimum dome stamps along the trail (density floor)
+  var SPIKE_GHOST_BLUR   = 4;         // px of GPU canvas blur used to soften the trail
   // Counter (press down as a spiked ball reaches your side): get under it and
   // spring it gently back up into a controllable volley instead of conceding.
   var COUNTER_UP      = 5.5;          // upward pop speed of a countered ball
@@ -1507,6 +1550,7 @@
   // leap from where the slime launched up to the smash point. Render-only.
   var spikeGhostT = 0, spikeGhostX0 = 0, spikeGhostY0 = 0,
       spikeGhostX1 = 0, spikeGhostY1 = 0, spikeGhostR = 0, spikeGhostCol = '#1c3f6e';
+  var ghostCv = null, ghostCtx = null, ghostBlurOK = false; // offscreen buffer for the blended trail
   var ballSpikeReady = false;
   function darken(hex, f){
     // f<1 darkens; returns a hex string in the same color family
@@ -1533,11 +1577,18 @@
     if(theme === 'city' || theme === 'beach'){
       var hAbove = GROUND - s.y;
       var sc = Math.max(0.45, 1 - hAbove/420);
-      var shX = s.x + s.r*0.35; // shadow to the lower-right
+      // Tuck the shadow under the slime's FULL base so it meets both base edges
+      // (the old one was too narrow + offset, leaving the left side detached).
+      // shRx - shOff sets the left edge: 1.05r reaches just past the slime's left
+      // base, while the offset still throws the cast to the lower-right (light is
+      // upper-left). Both shrink with height so it pulls in as the slime jumps.
+      var shOff = s.r * 0.20 * sc;  // lower-right cast offset
+      var shX   = s.x + shOff;
+      var shRx  = s.r * 1.25 * sc;  // half-width; left edge = s.x - 1.05r*sc
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,' + (0.28*sc).toFixed(3) + ')';
       ctx.beginPath();
-      ctx.ellipse(shX, GROUND, s.r*0.92*sc, s.r*0.20*sc, 0, 0, Math.PI*2);
+      ctx.ellipse(shX, GROUND, shRx, s.r*0.20*sc, 0, 0, Math.PI*2);
       ctx.fill();
       ctx.restore();
     }
@@ -1727,6 +1778,51 @@
     ctx.beginPath(); ctx.arc(ball.x, ball.y, vr, 0, Math.PI*2); ctx.fill();
   }
 
+  // Blended spike after-image: a soft shadow trail tracing the leap, built in an
+  // offscreen buffer so it reads as one smooth shape instead of discrete steps.
+  //   1) stamp a dense run of solid slime domes from launch -> smash (overlaps
+  //      merge into a clean union, with no per-step alpha banding),
+  //   2) fade that union along the path via a gradient alpha mask (solid at the
+  //      smash end, vanishing at the launch end),
+  //   3) composite it onto the game canvas through a GPU canvas blur for a soft
+  //      shadow. `gtl` is the 1 -> 0 lifetime fade. (When a CRT filter is on this
+  //      also flows through the WebGL post-pass, since it lands on #game.)
+  function drawSpikeGhost(gtl){
+    if(!ghostCv){
+      ghostCv = document.createElement('canvas');
+      ghostCv.width = W; ghostCv.height = H;
+      ghostCtx = ghostCv.getContext('2d');
+      ghostBlurOK = ('filter' in ghostCtx); // hardware-accelerated Canvas2D blur
+    }
+    var oc = ghostCtx, r = spikeGhostR;
+    var x0 = spikeGhostX0, y0 = spikeGhostY0, x1 = spikeGhostX1, y1 = spikeGhostY1;
+    oc.clearRect(0, 0, W, H);
+    // 1) solid union of domes along the leap
+    oc.globalCompositeOperation = 'source-over'; oc.globalAlpha = 1;
+    oc.fillStyle = spikeGhostCol;
+    var dist = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+    var n = Math.max(SPIKE_GHOST_STEPS, Math.round(dist / (r * 0.3)));
+    for(var i = 0; i <= n; i++){
+      var f = i / n, gx = x0 + (x1 - x0) * f, gy = y0 + (y1 - y0) * f;
+      oc.beginPath(); oc.arc(gx, gy, r, Math.PI, 0); oc.closePath(); oc.fill();
+    }
+    // 2) fade along the path (skip the degenerate zero-length case)
+    if(dist >= 1){
+      oc.globalCompositeOperation = 'destination-in';
+      var grad = oc.createLinearGradient(x0, y0, x1, y1);
+      grad.addColorStop(0.0, 'rgba(0,0,0,0)'); // launch end vanishes
+      grad.addColorStop(1.0, 'rgba(0,0,0,1)'); // smash end solid
+      oc.fillStyle = grad; oc.fillRect(0, 0, W, H);
+      oc.globalCompositeOperation = 'source-over';
+    }
+    // 3) composite as a soft, translucent shadow
+    ctx.save();
+    ctx.globalAlpha = 0.55 * gtl;
+    if(ghostBlurOK) ctx.filter = 'blur(' + SPIKE_GHOST_BLUR + 'px)';
+    ctx.drawImage(ghostCv, 0, 0);
+    ctx.restore();
+  }
+
   // DEBUG overlay: shade the three counter-outcome zones so you can see exactly
   // where an incoming spike, if countered, reads as a BLOCK (central column to the
   // top), a DIG (low full-width band), or a plain COUNTER (everywhere else).
@@ -1789,27 +1885,11 @@
       ctx.fillRect(0,0,WALL,GROUND); ctx.fillRect(W-WALL,0,WALL,GROUND);
     }
     flashT++;
-    // Spike after-image: a stepped line of faint slime domes tracing the leap,
-    // drawn BEFORE the live slimes so they sit on top. Each step eases brighter
-    // toward the smash point (so the trail "flows" into where the slime was),
-    // and the whole thing fades out over its lifetime.
+    // Spike after-image: a soft, BLENDED shadow trail of the leap (see
+    // drawSpikeGhost), drawn BEFORE the live slimes so they sit on top, fading
+    // out over its lifetime.
     if(spikeGhostT > 0){
-      var gtl = spikeGhostT / SPIKE_GHOST_FRAMES;            // 1 -> 0 overall fade
-      ctx.save();
-      ctx.fillStyle = spikeGhostCol;
-      for(var gi=0; gi<SPIKE_GHOST_STEPS; gi++){
-        var gf = (SPIKE_GHOST_STEPS>1) ? gi/(SPIKE_GHOST_STEPS-1) : 1; // 0 start..1 smash
-        var ga = 0.34 * (gf*gf) * gtl;                       // eased: fainter further back
-        if(ga < 0.012) continue;
-        var gx = spikeGhostX0 + (spikeGhostX1 - spikeGhostX0) * gf;
-        var gy = spikeGhostY0 + (spikeGhostY1 - spikeGhostY0) * gf;
-        ctx.globalAlpha = ga;
-        ctx.beginPath();
-        ctx.arc(gx, gy, spikeGhostR, Math.PI, 0);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
+      drawSpikeGhost(spikeGhostT / SPIKE_GHOST_FRAMES); // 1 -> 0 lifetime fade
       spikeGhostT--;
     }
     // Online: both peers run the real sim, so p1/p2/ball are already the true
