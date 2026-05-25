@@ -690,7 +690,7 @@
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
   <footer id="version">
-    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.12.2</span>
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.13.0</span>
     <span id="footer-social">
       <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
       <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
@@ -813,10 +813,29 @@
   var SPIKE_COOLDOWN = 40;            // frames before the same slime can spike again
   var SPIKE_FX_FRAMES = 16;           // spike flash duration (visual only, not sim)
   var SPIKE_TRAIL_FRAMES = 30;        // how long the wave trail streams off a spike
+  var SPIKE_GHOST_FRAMES = 20;        // after-image lifetime: stepped slime trail of the leap
+  var SPIKE_GHOST_STEPS  = 5;         // number of ghost silhouettes along that trail
   // Counter (press down as a spiked ball reaches your side): get under it and
   // spring it gently back up into a controllable volley instead of conceding.
   var COUNTER_UP      = 5.5;          // upward pop speed of a countered ball
   var COUNTER_VX_KEEP = 0.18;         // fraction of the spike's cross-court speed kept
+  // A counter is named by WHERE the ball was met. Three zones:
+  //   BLOCK   - a central column (centered on the net) from the TOP of the screen
+  //             down to BLOCK_ZONE_BOTTOM: you walled it off at the net.
+  //   DIG     - a full-width band near the floor (DIG_ZONE_TOP down to the ground):
+  //             a low save off the deck.
+  //   COUNTER - anywhere else. Purely cosmetic labels (see showCounteredPop/draw).
+  var BLOCK_ZONE_W      = 220;             // central BLOCK column width (centered on the net)
+  var BLOCK_ZONE_CX     = netX;            // column center X
+  var BLOCK_ZONE_BOTTOM = GROUND - NET_H - 6; // column runs from y=0 (screen top) down to just above the net
+  var DIG_ZONE_TOP      = GROUND - NET_H;  // DIG band: this y down to the ground (net-top height)
+  function counterKind(x, y){
+    if(Math.abs(x - BLOCK_ZONE_CX) <= BLOCK_ZONE_W/2 && y <= BLOCK_ZONE_BOTTOM) return 'BLOCKED';
+    if(y >= DIG_ZONE_TOP) return 'DIG';
+    return 'COUNTER';
+  }
+  var DEBUG_COUNTER_ZONES = false;      // draw the zone overlay; toggle with the C key
+  var lastCounterKind = 'COUNTER';      // render-only: kind of latest counter (BLOCKED/DIG/COUNTER)
 
   // Bounce SFX counters: the deterministic sim bumps bounceSeq on every ball
   // contact (slime/wall/net/floor) and bouncePlayerSeq only on slime hits. Both
@@ -1053,10 +1072,12 @@
     document.getElementById('msg').style.display = 'flex';
   }
   function hideMsg(){ document.getElementById('msg').style.display = 'none'; }
-  // Restart the "COUNTERED" popup animation (remove + reflow + re-add the class).
+  // Restart the counter popup animation (remove + reflow + re-add the class).
+  // The label depends on WHERE the ball was met: BLOCKED / DIG / COUNTER.
   function showCounteredPop(){
     var el = document.getElementById('countered-pop');
     if(!el) return;
+    el.textContent = lastCounterKind;
     el.classList.remove('play');
     void el.offsetWidth; // force reflow so the animation can replay
     el.classList.add('play');
@@ -1162,6 +1183,7 @@
   // Launch slime s up to the ball and smash it into the opponent's open court.
   function doSpike(s, opp){
     var dir = s.left ? 1 : -1;
+    var gx0 = s.x, gy0 = s.y; // remember where the leap STARTED (for the after-image)
     // 1) Launch the slime up to the ball, kept inside its own half.
     var tx = ball.x;
     if(s.left){
@@ -1207,6 +1229,13 @@
     // A rare rollback may re-arm it; harmless since draw() only runs post-replay.
     spikeFxT = SPIKE_FX_FRAMES; spikeFxX = ball.x; spikeFxY = ball.y;
     ballSpikeTrailT = SPIKE_TRAIL_FRAMES;
+    // After-image: trace the leap from the start point (gx0,gy0) up to the smash
+    // point (s.x,s.y). Tinted with the slime's own dark shade (dark blue for the
+    // blue slimes) so the ghosts read as analogous to whoever spiked.
+    spikeGhostX0 = gx0; spikeGhostY0 = gy0;
+    spikeGhostX1 = s.x; spikeGhostY1 = s.y;
+    spikeGhostR = s.r; spikeGhostCol = s.cold;
+    spikeGhostT = SPIKE_GHOST_FRAMES;
   }
   // A spiked ball heading onto slime s's side can be COUNTERED: any time it's
   // airborne on your own half, before it lands. (Defensive, so no cooldown.)
@@ -1224,6 +1253,9 @@
   // Get under the ball and spring it gently back up into a controllable volley,
   // killing most of the spike's cross-court pace. Neutralizes the spike.
   function doCounter(s){
+    // Name it by WHERE the ball was met, BEFORE we move it onto the dome below:
+    // central column = BLOCKED, low band = DIG, otherwise = COUNTER. Render-only.
+    lastCounterKind = counterKind(ball.x, ball.y);
     var tx = ball.x; // slide under the ball, kept inside our own half
     if(s.left){
       if(tx < FIELD_L + s.r) tx = FIELD_L + s.r;
@@ -1471,6 +1503,10 @@
   // "charged" ball for whoever can currently spike.
   var spikeFxT = 0, spikeFxX = 0, spikeFxY = 0;
   var ballSpikeTrailT = 0; // frames of wave trail left on the currently-spiked ball
+  // Spike after-image: a stepped trail of faint slime silhouettes tracing the
+  // leap from where the slime launched up to the smash point. Render-only.
+  var spikeGhostT = 0, spikeGhostX0 = 0, spikeGhostY0 = 0,
+      spikeGhostX1 = 0, spikeGhostY1 = 0, spikeGhostR = 0, spikeGhostCol = '#1c3f6e';
   var ballSpikeReady = false;
   function darken(hex, f){
     // f<1 darkens; returns a hex string in the same color family
@@ -1691,6 +1727,29 @@
     ctx.beginPath(); ctx.arc(ball.x, ball.y, vr, 0, Math.PI*2); ctx.fill();
   }
 
+  // DEBUG overlay: shade the three counter-outcome zones so you can see exactly
+  // where an incoming spike, if countered, reads as a BLOCK (central column to the
+  // top), a DIG (low full-width band), or a plain COUNTER (everywhere else).
+  // Toggle with the C key (DEBUG_COUNTER_ZONES).
+  function drawCounterZones(){
+    var bx = BLOCK_ZONE_CX - BLOCK_ZONE_W/2;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,170,60,0.06)'; ctx.fillRect(0, 0, W, GROUND);                         // COUNTER (everywhere)
+    ctx.fillStyle = 'rgba(80,170,255,0.16)'; ctx.fillRect(bx, 0, BLOCK_ZONE_W, BLOCK_ZONE_BOTTOM);  // BLOCK column (to top)
+    ctx.fillStyle = 'rgba(90,220,120,0.16)'; ctx.fillRect(0, DIG_ZONE_TOP, W, GROUND - DIG_ZONE_TOP);// DIG band (near floor)
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1; ctx.setLineDash([6,4]);
+    ctx.strokeRect(bx + 0.5, 0.5, BLOCK_ZONE_W, BLOCK_ZONE_BOTTOM);                                 // block outline
+    ctx.beginPath(); ctx.moveTo(0, DIG_ZONE_TOP + 0.5); ctx.lineTo(W, DIG_ZONE_TOP + 0.5); ctx.stroke(); // dig top line
+    ctx.setLineDash([]);
+    ctx.font = "10px 'PixelBold', monospace";
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(150,200,255,0.98)'; ctx.fillText('BLOCK', BLOCK_ZONE_CX, BLOCK_ZONE_BOTTOM - 4); // bottom of the block column
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255,200,110,0.95)'; ctx.fillText('COUNTER', 8, DIG_ZONE_TOP + 4 - 18); // 18px above DIG
+    ctx.fillStyle = 'rgba(120,230,150,0.98)'; ctx.fillText('DIG', 8, DIG_ZONE_TOP + 4);          // top of the dig band (unchanged)
+    ctx.restore();
+  }
+
   function draw(){
     // Bounce SFX: the sim recorded one or more new ball contacts since the last
     // rendered frame — play a single cue. (Rollback replays advance bounceSeq but
@@ -1730,6 +1789,29 @@
       ctx.fillRect(0,0,WALL,GROUND); ctx.fillRect(W-WALL,0,WALL,GROUND);
     }
     flashT++;
+    // Spike after-image: a stepped line of faint slime domes tracing the leap,
+    // drawn BEFORE the live slimes so they sit on top. Each step eases brighter
+    // toward the smash point (so the trail "flows" into where the slime was),
+    // and the whole thing fades out over its lifetime.
+    if(spikeGhostT > 0){
+      var gtl = spikeGhostT / SPIKE_GHOST_FRAMES;            // 1 -> 0 overall fade
+      ctx.save();
+      ctx.fillStyle = spikeGhostCol;
+      for(var gi=0; gi<SPIKE_GHOST_STEPS; gi++){
+        var gf = (SPIKE_GHOST_STEPS>1) ? gi/(SPIKE_GHOST_STEPS-1) : 1; // 0 start..1 smash
+        var ga = 0.34 * (gf*gf) * gtl;                       // eased: fainter further back
+        if(ga < 0.012) continue;
+        var gx = spikeGhostX0 + (spikeGhostX1 - spikeGhostX0) * gf;
+        var gy = spikeGhostY0 + (spikeGhostY1 - spikeGhostY0) * gf;
+        ctx.globalAlpha = ga;
+        ctx.beginPath();
+        ctx.arc(gx, gy, spikeGhostR, Math.PI, 0);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      spikeGhostT--;
+    }
     // Online: both peers run the real sim, so p1/p2/ball are already the true
     // current simulated state — drawn directly (rollback corrects them in-sim).
     drawSlime(p1);
@@ -1742,6 +1824,8 @@
     // Purely cosmetic — the collision box (GROUND-NET_H..GROUND) is unchanged.
     var netExtra = (theme === 'beach') ? 17 : 0;
     ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H + netExtra);
+    // DEBUG: show where a counter reads as BLOCK (high) vs DIG (low).
+    if(DEBUG_COUNTER_ZONES && gameMode === 'power'){ drawCounterZones(); }
     // Spike "charged" cue: flash the ball when the LOCAL player can spike now.
     ballSpikeReady = false;
     if(state === 'play' && ball.live){
@@ -2448,6 +2532,7 @@
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].indexOf(e.key)>=0) e.preventDefault();
     keys[e.key] = true;
     if(e.key===' '){ tryServe(); }
+    if(e.key==='c' || e.key==='C'){ DEBUG_COUNTER_ZONES = !DEBUG_COUNTER_ZONES; } // toggle counter-zone debug overlay
   });
   window.addEventListener('keyup', function(e){
     if(isTypingTarget(e.target)) return;
