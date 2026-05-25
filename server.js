@@ -1,4 +1,4 @@
-// Slime Volleyball - WebSocket relay + static file server.
+// Slime Volleyball 2 - WebSocket relay + static file server.
 //
 // Locally this serves BOTH the game (from /public) AND the WebSocket relay,
 // so you only run one command and open one URL. In production on Render it
@@ -195,6 +195,6 @@ wss.on("connection", (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log("Slime Volleyball running at http://localhost:" + PORT);
+  console.log("Slime Volleyball 2 running at http://localhost:" + PORT);
   console.log("Open that URL in two browser tabs/windows to test multiplayer.");
 });

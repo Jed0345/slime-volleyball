@@ -1,6 +1,6 @@
-# Slime Volleyball — Multiplayer
+# Slime Volleyball 2 — Multiplayer
 
-A pixel-art Slime Volleyball game with three modes: vs CPU, local 2-player, and
+A pixel-art Slime Volleyball 2 game with three modes: vs CPU, local 2-player, and
 **online multiplayer** over a WebSocket relay.
 
 ```

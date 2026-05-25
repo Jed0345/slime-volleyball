@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Slime Volleyball</title>
+<title>Slime Volleyball 2</title>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-filters@5/dist/browser/pixi-filters.min.js"></script>
 <style>
@@ -271,6 +271,16 @@
     color:#e8ecf4; flex-shrink:0; pointer-events:auto;
   }
   #joystick-jump:active{ background:rgba(255,255,255,0.55); color:#1a1f2e; }
+  /* SPIKE sits just left of JUMP (JUMP stays in the thumb corner), a touch
+     smaller, with the same gray/white styling that fills white on press. */
+  #action-buttons{ display:flex; align-items:flex-end; gap:12px; flex-shrink:0; }
+  #joystick-spike{
+    width:96px; height:96px; border-radius:50%;
+    font-size:15px; font-weight:bold; letter-spacing:1px;
+    background:rgba(0,0,0,0.25); border:2px solid #e8ecf4;
+    color:#e8ecf4; flex-shrink:0; pointer-events:auto;
+  }
+  #joystick-spike:active{ background:rgba(255,255,255,0.55); color:#1a1f2e; }
 
   #chat{
     position:relative;
@@ -459,10 +469,22 @@
   }
 
   #version{
-    margin-top:4px; text-align:center;
+    width:100%; max-width:750px;
+    margin-top:4px; padding-top:18px; padding-bottom:18px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-top:1px solid rgba(255,255,255,0.12);
     font-family:'PixelBold', monospace; font-size:10px; letter-spacing:1px;
     color:var(--text-tertiary);
   }
+  #footer-social{ display:inline-flex; align-items:center; gap:12px; }
+  .footer-icon{
+    display:inline-flex; align-items:center;
+    color:#6b7488; transition:color .15s;
+  }
+  .footer-icon:hover{ color:#fff; }
+  .footer-icon svg{ width:22px; height:22px; display:block; fill:currentColor; }
+  #version-text{ display:inline-flex; align-items:center; }
+  .footer-sep{ display:inline-block; width:1px; height:11px; margin:0 9px; background:currentColor; opacity:0.45; }
 </style>
 </head>
 <body>
@@ -498,7 +520,7 @@
       <span class="ping-row"><span class="ping-who">OPP</span><span id="ping-opp" class="ping-val">--</span></span>
     </div>
     <div id="msg">
-      <div id="msgtext">SLIME<br>VOLLEYBALL</div>
+      <div id="msgtext">SLIME<br>VOLLEYBALL 2</div>
       <div id="msgsub">PRESS SPACE OR TAP</div>
     </div>
     <div id="rematch" style="display:none;">
@@ -525,6 +547,7 @@
       <button id="winmodebtn" style="display:none;">Mode: First to 6</button>
       <button id="modebtn">Mode: 1 Player</button>
       <button id="oppbtn">Opponent: White Slime</button>
+      <button id="gamemodebtn">Rules: Classic Slime</button>
       <button id="resetbtn">Reset</button>
       <button id="leavebtn" style="display:none;">Leave Room</button>
       <button id="musicbtn" type="button" class="music-off" aria-label="Toggle music" title="Music">
@@ -637,14 +660,28 @@
       <div id="joystick-base" aria-label="Joystick">
         <div id="joystick-knob"></div>
       </div>
-      <button id="joystick-jump" aria-label="Jump">JUMP</button>
+      <div id="action-buttons">
+        <button id="joystick-spike" aria-label="Spike" style="display:none;">SPIKE</button>
+        <button id="joystick-jump" aria-label="Jump">JUMP</button>
+      </div>
     </div>
   </div>
 
   <!-- Background music (loops). Toggled by the sound icon in the controls row. -->
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
-  <footer id="version">Slime Volleyball v1.9.0</footer>
+  <footer id="version">
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.10.0</span>
+    <span id="footer-social">
+      <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+      </a>
+      <!-- TODO: replace href="#" with the real subreddit link -->
+      <a id="reddit-link" class="footer-icon" href="#" target="_blank" rel="noopener" aria-label="Visit our subreddit">
+        <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.91 2.961.91.477 0 2.105-.057 2.961-.91a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.198-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+      </a>
+    </span>
+  </footer>
 
 <script>
 (function(){
@@ -689,14 +726,18 @@
   var BEACH_FLOOR_SRC = 828;     // source row of the court's front line
 
   // Speeds are scaled to the player's MOVE speed (6.25). react = how tightly
-  // the AI tracks (1 = no lag), jumpChance = how eagerly it jumps to hit.
-  // Difficulty ramps White -> Red -> Master -> Psycho -> Big Blue.
+  // the AI tracks (1 = no lag), jumpChance = how eagerly it jumps to hit,
+  // rmul = body size. Every knob ramps monotonically so each boss is strictly
+  // harder than the last: White -> Red -> Master -> Psycho -> Big Blue.
+  // Big Blue is the biggest + sharpest, but rmul is kept at 1.25 (r=50) so the
+  // court still has scoring gaps — at the old 1.55 (r=62) it walled off almost
+  // the whole half-court and was effectively unbeatable.
   var OPPS = [
-    {name:'White Slime',  col:'#f3f3f3', cold:'#8f8f8f', react:0.55, speed:5.25, jumpChance:0.55, rmul:1.0, flash:false},
-    {name:'Red Slimons',  col:'#d83a3a', cold:'#8f1f1f', react:0.62, speed:5.5,  jumpChance:0.6,  rmul:1.0, flash:false, drop:true},
-    {name:'Slime Master', col:'#222222', cold:'#000000', react:0.8,  speed:6.0,  jumpChance:0.8,  rmul:1.0, flash:false},
-    {name:'Psycho Slime', col:'#c040d0', cold:'#5c1d6b', react:0.9,  speed:8.5,  jumpChance:0.9,  rmul:1.0, flash:true},
-    {name:'Big Blue Boss',col:'#2a55d6', cold:'#16307e', react:0.85, speed:6.5,  jumpChance:0.88, rmul:1.55, flash:false}
+    {name:'White Slime',  col:'#f3f3f3', cold:'#8f8f8f', react:0.50, speed:5.0, jumpChance:0.50, rmul:1.0,  flash:false},
+    {name:'Red Slimons',  col:'#d83a3a', cold:'#8f1f1f', react:0.60, speed:5.5, jumpChance:0.60, rmul:1.0,  flash:false, drop:true},
+    {name:'Slime Master', col:'#222222', cold:'#000000', react:0.72, speed:6.0, jumpChance:0.72, rmul:1.08, flash:false, spikeChance:0.06},
+    {name:'Psycho Slime', col:'#c040d0', cold:'#5c1d6b', react:0.84, speed:6.5, jumpChance:0.84, rmul:1.15, flash:true,  spikeChance:0.10},
+    {name:'Big Blue Boss',col:'#2a55d6', cold:'#16307e', react:0.90, speed:6.8, jumpChance:0.90, rmul:1.25, flash:false, spikeChance:0.16}
   ];
   var oppIdx = 0;
   // Single-player gauntlet: set when the player beats a boss, so the next serve
@@ -728,6 +769,23 @@
   // Side walls absorb some horizontal speed on each bounce, so a hard spike to
   // the far wall can't rebound all the way back across the court.
   var WALL_BOUNCE = 0.7;
+
+  // --- Spike special move (down/S button) ----------------------------------
+  // When the ball is on your own side, moving toward the opponent, high, fast,
+  // and near the net, it "charges" (flashes). Pressing spike then launches the
+  // slime up to the ball and smashes it into the open part of the opponent's
+  // court (away from where they're standing). A spike can exceed the normal
+  // MAX_VX — it's a power move — but the trajectory always clears the net.
+  var SPIKE_SPEED   = 6.5;            // min ball speed (px/frame) to charge a spike
+  var SPIKE_MAX_BALL_Y = GROUND - 100;// ball must be ABOVE this (smaller y = higher)
+  var SPIKE_NET_DIST = 155;           // ...and within this many px of the net (so the
+                                      //    smash can clear it from your own side)
+  var SPIKE_VX      = 16.0;           // horizontal smash cap (above the normal MAX_VX)
+  var SPIKE_VY      = 1.2;            // gentle initial dip; gravity steepens the fall,
+                                      //    so it crosses the net flat then drops hard
+  var SPIKE_COOLDOWN = 40;            // frames before the same slime can spike again
+  var SPIKE_FX_FRAMES = 16;           // spike flash duration (visual only, not sim)
+  var SPIKE_TRAIL_FRAMES = 30;        // how long the wave trail streams off a spike
 
   // Bounce SFX counters: the deterministic sim bumps bounceSeq on every ball
   // contact (slime/wall/net/floor) and bouncePlayerSeq only on slime hits. Both
@@ -781,7 +839,7 @@
     { name:'Red Slimons',  color:'#d83a3a' },
     { name:'Slime Master', color:'#222222' },
     { name:'Psycho Slime', color:'#c040d0', flash:true },
-    { name:'Big Blue Boss',color:'#2a55d6', rmul:1.55 } // big, like the AI boss
+    { name:'Big Blue Boss',color:'#2a55d6', rmul:1.25 } // big, like the AI boss
   ];
   function bossSkinByName(name){
     for(var i=0;i<BOSS_SKINS.length;i++){ if(BOSS_SKINS[i].name === name) return BOSS_SKINS[i]; }
@@ -833,7 +891,8 @@
             col: left?BLUE:(opp?opp.col:PINK),
             cold:left?BLUE_D:(opp?opp.cold:PINK_D),
             flash: (!left && opp) ? !!opp.flash : false, // AI boss (Psycho) flashes
-            onGround:true};
+            onGround:true,
+            spikeCD:0, spikeHeld:false}; // spike cooldown + edge-detect (sim state)
   }
   function curOpp(){ return OPPS[oppIdx]; }
 
@@ -889,6 +948,22 @@
   var WIN = DEFAULT_WIN;
   var hostWin = DEFAULT_WIN; // the host's chosen target for the next online game
   var WIN_OPTIONS = [3, 5, 6, 7, 10, 15]; // values the host cycles with the Mode button
+
+  // Gameplay ruleset. 'classic' = the original mechanics (default); 'power' =
+  // Power Slime, which enables the spike special move. It's constant for a whole
+  // match, so the sim can read it directly; online, the host's choice is synced
+  // to the guest before the sim starts (see startOnlineMatch / handleNetMessage).
+  var gameMode = 'classic';
+  try{ var _gm = localStorage.getItem('slimeGameMode'); if(_gm === 'classic' || _gm === 'power') gameMode = _gm; }catch(e){}
+  function gameModeLabel(m){ return m === 'power' ? 'Power Slime' : 'Classic Slime'; }
+  // Reflect the current mode in the toggle label and the touch SPIKE button
+  // (which is pointless outside Power Slime, so hide it in Classic).
+  function updateGameModeUI(){
+    var b = document.getElementById('gamemodebtn');
+    if(b) b.textContent = 'Rules: ' + gameModeLabel(gameMode);
+    var sp = document.getElementById('joystick-spike');
+    if(sp) sp.style.display = (gameMode === 'power') ? '' : 'none';
+  }
   function updateWinModeBtn(){
     var b = document.getElementById('winmodebtn');
     if(b) b.textContent = 'Mode: First to ' + WIN;
@@ -1029,6 +1104,76 @@
     }
   }
 
+  // --- Spike special move --------------------------------------------------
+  // Available when the ball is on slime s's own side, heading toward the
+  // opponent, near the net, high, and fast. Pure read of sim state, so it's
+  // deterministic — used both to fire the spike and to flash the ball cue.
+  function canSpike(s){
+    if(gameMode !== 'power') return false; // spike is a Power Slime mechanic only
+    if(state !== 'play' || !ball.live) return false;
+    var ownSide    = s.left ? (ball.x < netX) : (ball.x > netX);
+    var toOpp      = s.left ? (ball.vx > 0)   : (ball.vx < 0);
+    var nearNet    = s.left ? (ball.x > netX - SPIKE_NET_DIST) : (ball.x < netX + SPIKE_NET_DIST);
+    var highEnough = ball.y < SPIKE_MAX_BALL_Y;
+    var fast       = (ball.vx*ball.vx + ball.vy*ball.vy) >= SPIKE_SPEED*SPIKE_SPEED;
+    return ownSide && toOpp && nearNet && highEnough && fast;
+  }
+  // Launch slime s up to the ball and smash it into the opponent's open court.
+  function doSpike(s, opp){
+    var dir = s.left ? 1 : -1;
+    // 1) Launch the slime up to the ball, kept inside its own half.
+    var tx = ball.x;
+    if(s.left){
+      if(tx < FIELD_L + s.r) tx = FIELD_L + s.r;
+      if(tx > netX - NET_W/2 - s.r) tx = netX - NET_W/2 - s.r;
+    } else {
+      if(tx < netX + NET_W/2 + s.r) tx = netX + NET_W/2 + s.r;
+      if(tx > FIELD_R - s.r) tx = FIELD_R - s.r;
+    }
+    s.x = tx;
+    s.y = Math.min(GROUND, ball.y + s.r*0.9); // pop up to meet the ball
+    s.onGround = false;
+    s.vy = 2.0;                               // then fall back down
+    // 2) Park the ball just clear of the dome (up + toward the opponent) so the
+    //    normal slime collision can't fire this frame and clobber the smash.
+    ball.x = s.x + dir*(ball.r + 4);
+    ball.y = s.y - (s.r + ball.r + 4);
+    // 3) Aim at the open gap: opponent deep -> drop it short over the net;
+    //    opponent up near the net -> drive it deep to the far corner.
+    var oppMid  = s.left ? (netX + FIELD_R)/2 : (FIELD_L + netX)/2;
+    var oppDeep = s.left ? (opp.x > oppMid) : (opp.x < oppMid);
+    var targetX;
+    if(s.left) targetX = oppDeep ? (netX + NET_W/2 + ball.r + 45) : (FIELD_R - ball.r - 30);
+    else       targetX = oppDeep ? (netX - NET_W/2 - ball.r - 45) : (FIELD_L + ball.r + 30);
+    // 4) Solve the horizontal speed that lands at targetX given the fall time
+    //    from this height; clamp to the spike cap and guarantee forward pace so
+    //    it always crosses the net onto the opponent's side. (sqrt is one of the
+    //    few bit-identical ops, so this stays deterministic for rollback.)
+    var T = (-SPIKE_VY + Math.sqrt(SPIKE_VY*SPIKE_VY + 2*BALL_GRAV*(GROUND - ball.y))) / BALL_GRAV;
+    var vx = (targetX - ball.x) / T;
+    if(vx >  SPIKE_VX) vx =  SPIKE_VX;
+    if(vx < -SPIKE_VX) vx = -SPIKE_VX;
+    if(dir > 0 && vx <  6) vx =  6;
+    if(dir < 0 && vx > -6) vx = -6;
+    ball.vx = vx;
+    ball.vy = SPIKE_VY;
+    ball.live = true;
+    s.spikeCD = SPIKE_COOLDOWN;
+    bounceSeq++; bouncePlayerSeq++;           // smash SFX via the bounce-cue path
+    // Cosmetic burst (not sim state): online runs the real step with
+    // simReplaying=true, so DON'T gate this on it or the FX never shows online.
+    // A rare rollback may re-arm it; harmless since draw() only runs post-replay.
+    spikeFxT = SPIKE_FX_FRAMES; spikeFxX = ball.x; spikeFxY = ball.y;
+    ballSpikeTrailT = SPIKE_TRAIL_FRAMES;
+  }
+  // Per-frame spike handling for a human slime: count down the cooldown, then
+  // fire on the rising edge of the spike input (so a held button taps once).
+  function tickSpike(s, pressed, opp){
+    if(s.spikeCD > 0) s.spikeCD--;
+    if(pressed && !s.spikeHeld && s.spikeCD <= 0 && canSpike(s)) doSpike(s, opp);
+    s.spikeHeld = pressed;
+  }
+
   function aiControl(){
     var opp = curOpp();
     var predictX = ball.x;
@@ -1065,6 +1210,12 @@
       if(Math.random() < opp.jumpChance) jp = true;
     }
     moveSlime(p2, ml, mr, jp, opp.speed);
+    // Bosses can unleash the same spike. spikeChance ramps with difficulty
+    // (weaker bosses leave it 0); availability + cooldown gate it like a player.
+    if(p2.spikeCD > 0) p2.spikeCD--;
+    if(opp.spikeChance && p2.spikeCD <= 0 && canSpike(p2) && Math.random() < opp.spikeChance){
+      doSpike(p2, p1);
+    }
   }
 
   function collideSlime(s){
@@ -1204,6 +1355,12 @@
   }
 
   var flashT = 0;
+  // Spike visuals (NOT part of the sim/rollback state): a brief burst at the
+  // smash point, and a flag set each frame telling drawBall to flash the
+  // "charged" ball for whoever can currently spike.
+  var spikeFxT = 0, spikeFxX = 0, spikeFxY = 0;
+  var ballSpikeTrailT = 0; // frames of wave trail left on the currently-spiked ball
+  var ballSpikeReady = false;
   function darken(hex, f){
     // f<1 darkens; returns a hex string in the same color family
     var h = hex.replace('#','');
@@ -1395,11 +1552,17 @@
   function drawBall(){
     var sk = ballSkin ? ballBossByName(ballSkin) : null;
     var vr = BALL_R * (sk && sk.rmul ? sk.rmul : 1);
+    // Charged-spike halo: a yellow ring that strobes behind the ball (drawn
+    // before the body so the ball sits on top), telling you a spike is ready.
+    if(ballSpikeReady && (Math.floor(flashT/4)%2===0)){
+      ctx.fillStyle = '#fff36b';
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 7, 0, Math.PI*2); ctx.fill();
+    }
     if(sk && sk.style === 'volleyball' && volleyReady){
       // Dark backing disc so the light emoji reads against bright backdrops; it
       // peeks out around the ball as an outline.
       ctx.fillStyle = '#241700';
-      ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 2.5, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 1.25, 0, Math.PI*2); ctx.fill();
       ctx.drawImage(volleyImg, ball.x - vr, ball.y - vr, vr*2, vr*2); // Noto volleyball emoji
       return;
     }
@@ -1457,7 +1620,62 @@
     // Purely cosmetic — the collision box (GROUND-NET_H..GROUND) is unchanged.
     var netExtra = (theme === 'beach') ? 17 : 0;
     ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H + netExtra);
+    // Spike "charged" cue: flash the ball when the LOCAL player can spike now.
+    ballSpikeReady = false;
+    if(state === 'play' && ball.live){
+      if(netMode){ ballSpikeReady = canSpike((rb && rb.side === 'p2') ? p2 : p1); }
+      else if(twoPlayer){ ballSpikeReady = canSpike(p1) || canSpike(p2); }
+      else { ballSpikeReady = canSpike(p1); }
+    }
+    // Spike wave: an animated sine ribbon streaming behind a smashed ball,
+    // drawn before the ball so it appears to trail out from behind it. The
+    // amplitude scales with the ball's speed and fades over the trail's life,
+    // and the phase shifts each frame so the wave travels — a "dynamic" trail.
+    if(ballSpikeTrailT > 0){
+      if(ball.live){
+        var sp2 = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+        if(sp2 > 1){
+          var dx2 = ball.vx/sp2, dy2 = ball.vy/sp2;        // travel direction
+          var px2 = -dy2, py2 = dx2;                        // perpendicular
+          var tl  = ballSpikeTrailT / SPIKE_TRAIL_FRAMES;   // 1 -> 0 fade
+          var len2 = 58, amp2 = Math.min(11, sp2*0.6) * tl, startBack = BALL_R + 3;
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#fff36b';
+          ctx.globalAlpha = 0.9 * tl;
+          ctx.beginPath();
+          var SEG = 18;
+          for(var si=0; si<=SEG; si++){
+            var ff  = si/SEG;                               // 0 at ball, 1 at tail
+            var env = Math.sin(ff*Math.PI);                 // 0 at both ends, peak mid
+            var wob = Math.sin(ff*11 - flashT*0.8) * amp2 * env;
+            var wx  = ball.x - dx2*(startBack + ff*len2) + px2*wob;
+            var wy  = ball.y - dy2*(startBack + ff*len2) + py2*wob;
+            if(si===0) ctx.moveTo(wx, wy); else ctx.lineTo(wx, wy);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+        ballSpikeTrailT--;
+      } else {
+        ballSpikeTrailT = 0; // ball dead: don't carry the trail to the next serve
+      }
+    }
     drawBall();
+    // Spike burst: a quick expanding ring at the smash point.
+    if(spikeFxT > 0){
+      var k = spikeFxT / SPIKE_FX_FRAMES; // 1 -> 0
+      ctx.save();
+      ctx.globalAlpha = k;
+      ctx.strokeStyle = '#fff36b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(spikeFxX, spikeFxY, (1 - k) * 46 + 8, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+      spikeFxT--;
+    }
   }
 
   // ===================== NETWORKING =====================
@@ -1626,32 +1844,33 @@
                             // by the next one (rollback can't fix an input that never
                             // arrives). Inputs are 1 byte each, so this stays tiny.
 
-  var NOINPUT = {left:false, right:false, jump:false};
+  var NOINPUT = {left:false, right:false, jump:false, spike:false};
   function sampleLocalInput(){
     var left  = !!(keys['a']||keys['A']||keys['ArrowLeft']);
     var right = !!(keys['d']||keys['D']||keys['ArrowRight']);
     var jump  = !!(keys['w']||keys['W']||keys['ArrowUp']||keys[' ']);
+    var spike = !!(keys['s']||keys['S']||keys['ArrowDown']); // not directional, no mirror
     // The guest's view is mirrored (they see themselves on the left), so swap
     // horizontal input: pressing "right" should move their slime toward the net
     // on screen. The sent input is already in simulation space, so both peers
     // stay in lockstep.
     if(netMode === 'guest'){ var t = left; left = right; right = t; }
-    return {left:left, right:right, jump:jump};
+    return {left:left, right:right, jump:jump, spike:spike};
   }
-  function inputsEqual(a, b){ return a.left===b.left && a.right===b.right && a.jump===b.jump; }
+  function inputsEqual(a, b){ return a.left===b.left && a.right===b.right && a.jump===b.jump && a.spike===b.spike; }
 
   // Full snapshot of everything the simulation reads/writes, for save/restore.
   function getGameState(){
     return {
-      p1:{x:p1.x, y:p1.y, vx:p1.vx, vy:p1.vy, g:p1.onGround},
-      p2:{x:p2.x, y:p2.y, vx:p2.vx, vy:p2.vy, g:p2.onGround},
+      p1:{x:p1.x, y:p1.y, vx:p1.vx, vy:p1.vy, g:p1.onGround, scd:p1.spikeCD, sh:p1.spikeHeld},
+      p2:{x:p2.x, y:p2.y, vx:p2.vx, vy:p2.vy, g:p2.onGround, scd:p2.spikeCD, sh:p2.spikeHeld},
       ball:{x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy, live:ball.live},
       a:scores.p1, b:scores.p2, sv:server, st:state, bs:bounceSeq, bps:bouncePlayerSeq
     };
   }
   function setGameState(s){
-    p1.x=s.p1.x; p1.y=s.p1.y; p1.vx=s.p1.vx; p1.vy=s.p1.vy; p1.onGround=s.p1.g;
-    p2.x=s.p2.x; p2.y=s.p2.y; p2.vx=s.p2.vx; p2.vy=s.p2.vy; p2.onGround=s.p2.g;
+    p1.x=s.p1.x; p1.y=s.p1.y; p1.vx=s.p1.vx; p1.vy=s.p1.vy; p1.onGround=s.p1.g; p1.spikeCD=s.p1.scd||0; p1.spikeHeld=!!s.p1.sh;
+    p2.x=s.p2.x; p2.y=s.p2.y; p2.vx=s.p2.vx; p2.vy=s.p2.vy; p2.onGround=s.p2.g; p2.spikeCD=s.p2.scd||0; p2.spikeHeld=!!s.p2.sh;
     ball.x=s.ball.x; ball.y=s.ball.y; ball.vx=s.ball.vx; ball.vy=s.ball.vy; ball.live=s.ball.live;
     scores.p1=s.a; scores.p2=s.b; server=s.sv; state=s.st; bounceSeq=s.bs||0; bouncePlayerSeq=s.bps||0;
   }
@@ -1668,6 +1887,8 @@
     }
     moveSlime(p1, inA.left, inA.right, inA.jump, MOVE);
     moveSlime(p2, inB.left, inB.right, inB.jump, MOVE);
+    tickSpike(p1, inA.spike, p2);
+    tickSpike(p2, inB.spike, p1);
     updateBall(); // may end the point/match (purely — DOM is suppressed during sim)
   }
 
@@ -1707,13 +1928,13 @@
     var applyF = rb.frame + INPUT_DELAY;
     if(rb.local[applyF] === undefined){ rb.local[applyF] = sampleLocalInput(); } // lock this frame's input once
     // Send the newest frame plus a redundant window of recent ones, packed one
-    // byte per frame (bit0 left, bit1 right, bit2 jump). Sent every tick so the
+    // byte per frame (bit0 left, bit1 right, bit2 jump, bit3 spike). Sent every tick so the
     // unreliable channel self-heals dropped packets; the WS fallback dedupes by
     // frame, so resends are harmless.
     var hist = [];
     for(var hf = applyF - INPUT_REDUNDANCY + 1; hf <= applyF; hf++){
       var li = (hf >= 0 && rb.local[hf]) ? rb.local[hf] : NOINPUT;
-      hist.push((li.left?1:0) | (li.right?2:0) | (li.jump?4:0));
+      hist.push((li.left?1:0) | (li.right?2:0) | (li.jump?4:0) | (li.spike?8:0));
     }
     rtcSend({type:'in', f:applyF, n:hist});
     if(rb.frame - rb.lastRemoteFrame > MAX_ROLLBACK){ rb.stalled = true; return; }
@@ -1737,7 +1958,7 @@
       var fr = end - (arr.length - 1) + i;
       if(fr < 0 || rb.remote[fr]) continue; // out of range or already confirmed
       var bits = arr[i]|0;
-      var inp = {left:!!(bits&1), right:!!(bits&2), jump:!!(bits&4)};
+      var inp = {left:!!(bits&1), right:!!(bits&2), jump:!!(bits&4), spike:!!(bits&8)};
       rb.remote[fr] = inp;
       if(fr > rb.lastRemoteFrame){ rb.lastRemoteFrame = fr; rb.lastRemoteInput = inp; }
       if(fr < rb.frame && rb.used[fr] && rb.saved[fr] && !inputsEqual(rb.used[fr], inp)){
@@ -1810,6 +2031,7 @@
     document.getElementById('p2name').textContent = 'PINK';
     document.getElementById('oppbtn').style.display = 'none';
     document.getElementById('modebtn').style.display = 'none';
+    document.getElementById('gamemodebtn').style.display = 'none'; // locked online (host's pick is synced below)
     document.getElementById('resetbtn').style.display = 'none';
     document.getElementById('leavebtn').style.display = '';
     // Only the host can pick the points-to-win; the guest follows via 'config'.
@@ -1825,8 +2047,9 @@
     document.getElementById('sv-board').classList.toggle('mirror', !asHost);
     document.getElementById('lobby').style.display = 'none';
     updateSkinPickerVisibility();
-    // Host tells the guest the target score so both show matching dots.
-    if(asHost) netSend({type:'config', win: WIN});
+    // Host tells the guest the target score so both show matching dots, and the
+    // ruleset (Classic/Power) so both run an identical deterministic sim.
+    if(asHost){ netSend({type:'config', win: WIN}); netSend({type:'gamemode', mode: gameMode}); }
     // Tell the peer which color and username we picked for our slime.
     var mySide = asHost ? 'p1' : 'p2';
     netSend({type:'skin', side: mySide, color: slimeSkins[mySide].color, boss: slimeSkins[mySide].boss});
@@ -1885,7 +2108,7 @@
       stopPing();
       updatePingUI();
       lobbyStatus('That room is no longer available.');
-      setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
+      setMsg('SLIME<br>VOLLEYBALL 2', 'PRESS SPACE OR TAP');
       return;
     }
     // The opponent dropped (maybe refreshing) — pause and wait out the grace window.
@@ -1901,7 +2124,7 @@
       var side = (netMode === 'host') ? 'p1' : 'p2';
       netSend({type:'skin', side: side, color: slimeSkins[side].color, boss: slimeSkins[side].boss});
       netSend({type:'name', name: chatUsername});
-      if(netMode === 'host'){ netSend({type:'config', win: WIN}); }
+      if(netMode === 'host'){ netSend({type:'config', win: WIN}); netSend({type:'gamemode', mode: gameMode}); }
       netSend({type:'resync', a: scores.p1, b: scores.p2, sv: server});
       _presSt = ''; _presSv = '';
       rbResync(scores.p1, scores.p2, server);
@@ -1945,6 +2168,11 @@
 
     if(m.type === 'config' && typeof m.win === 'number'){
       setWin(m.win); // guest adopts the host's points-to-win
+      return;
+    }
+    if(m.type === 'gamemode' && (m.mode === 'classic' || m.mode === 'power')){
+      gameMode = m.mode;   // guest adopts the host's ruleset (Classic/Power)
+      updateGameModeUI();  // sync the touch SPIKE button visibility
       return;
     }
 
@@ -2033,13 +2261,16 @@
         var p2r = keys['l']||keys['L']||keys['ArrowRight'];
         var p2j = keys['i']||keys['I']||keys['ArrowUp'];
         moveSlime(p2, p2l, p2r, p2j, MOVE);
+        tickSpike(p1, !!(keys['s']||keys['S']), p2);    // P1 spikes with S
+        tickSpike(p2, !!keys['ArrowDown'], p1);          // P2 spikes with Down
         updateBall();
       } else {
         var ml = keys['a']||keys['A']||keys['ArrowLeft'];
         var mr = keys['d']||keys['D']||keys['ArrowRight'];
         var jp = keys['w']||keys['W']||keys['ArrowUp']||keys[' '];
         moveSlime(p1, ml, mr, jp, MOVE);
-        aiControl();
+        tickSpike(p1, !!(keys['s']||keys['S']||keys['ArrowDown']), p2);
+        aiControl(); // the CPU handles its own spike inside aiControl
         updateBall();
       }
     }
@@ -2120,6 +2351,7 @@
     el.addEventListener('mouseleave', off);
   }
   bindHold('joystick-jump','w');
+  bindHold('joystick-spike','s');
 
   // Virtual joystick: drag the knob, push past a deadzone left/right to engage
   // the corresponding movement key. Vertical axis is ignored (jump uses the
@@ -2228,7 +2460,7 @@
   });
 
   document.getElementById('resetbtn').addEventListener('click', function(){
-    init(); setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
+    init(); setMsg('SLIME<br>VOLLEYBALL 2', 'PRESS SPACE OR TAP');
   });
   document.getElementById('leavebtn').addEventListener('click', function(){
     netLeave(); // tells the server, clears the saved room, then reloads to offline
@@ -2383,8 +2615,18 @@
   document.getElementById('modebtn').addEventListener('click', function(){
     twoPlayer = !twoPlayer;
     init();
-    setMsg('SLIME<br>VOLLEYBALL', twoPlayer ? '2 PLAYER MODE' : 'PRESS SPACE OR TAP');
+    setMsg('SLIME<br>VOLLEYBALL 2', twoPlayer ? '2 PLAYER MODE' : 'PRESS SPACE OR TAP');
   });
+  // Ruleset toggle: Classic Slime (default) <-> Power Slime (spike enabled).
+  document.getElementById('gamemodebtn').addEventListener('click', function(){
+    if(netMode) return; // locked during an online match; the host picks it first
+    gameMode = (gameMode === 'power') ? 'classic' : 'power';
+    try{ localStorage.setItem('slimeGameMode', gameMode); }catch(e){}
+    updateGameModeUI();
+    init();
+    setMsg('SLIME<br>VOLLEYBALL 2', gameModeLabel(gameMode).toUpperCase() + ' MODE');
+  });
+  updateGameModeUI(); // reflect the persisted/default ruleset on load
   // Online host: cycle the points-to-win. setWin() rebuilds the dot row + "FIRST
   // TO N" label, and the 'config' message makes the guest do the same.
   document.getElementById('winmodebtn').addEventListener('click', function(){
@@ -3001,7 +3243,7 @@
   buildDots();
   init();
   updateSkinPickerVisibility();
-  setMsg('SLIME<br>VOLLEYBALL', 'PRESS SPACE OR TAP');
+  setMsg('SLIME<br>VOLLEYBALL 2', 'PRESS SPACE OR TAP');
   requestAnimationFrame(loop);
 
   // If we were in an online room before a refresh, transparently rejoin it.
