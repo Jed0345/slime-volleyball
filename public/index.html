@@ -164,6 +164,13 @@
   }
   #volctl .vol-toggle.on{ color:#5dd663; border-color:#5dd663; }
 
+  /* App layout: a centered column (navbar, game, controls, skins). On wide
+     screens the chat becomes a fixed right-hand side panel — see the
+     @media (min-width:1100px) block placed AFTER the chat styles below (so its
+     position:fixed wins over the base #chat position:relative by source order). */
+  #app{ width:100%; display:flex; flex-direction:column; align-items:center; gap:12px; }
+  #app-main{ width:100%; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:0; }
+
   #stage{ position:relative; width:100%; max-width:750px; }
   /* Positioning context for the court overlays (msg, rematch, ping, pixi). */
   #court{ position:relative; width:100%; }
@@ -243,6 +250,7 @@
     width:100%; max-width:750px; flex-wrap:wrap;
   }
   #controlhint{ font-size:13px; color:var(--text-secondary); }
+  #powerhint{ font-size:13px; color:var(--text-secondary); }
   #btns{ display:flex; gap:8px; flex-wrap:wrap; }
   button{
     font-family:system-ui, sans-serif; font-size:13px; color:#e8ecf4;
@@ -400,6 +408,34 @@
   #chat-messages li{ margin:0 0 4px 0; word-wrap:break-word; word-break:break-word; }
   #chat-messages li .user{ font-weight:bold; margin-right:6px; }
   #chat-messages li.system{ color:var(--text-tertiary); font-style:italic; }
+
+  /* Chat as a fixed right-hand SIDE PANEL on wide screens. Placed AFTER the base
+     #chat rules so its position:fixed wins (equal specificity -> source order).
+     Width is a fraction of the game width and it's anchored just to the right of
+     the centered game, so the gap between them stays small and constant at any
+     width. To resize the panel, change --chat-frac only — the reserved gutter and
+     the anchor position both derive from it. */
+  @media (min-width:1100px){
+    :root{
+      --game-w: 750px;                                       /* the game's width */
+      --chat-frac: 0.50;                                     /* panel width = frac × game width */
+      --chat-w: calc(var(--game-w) * var(--chat-frac));
+      --chat-gap: 16px;                                      /* gap between game and panel */
+      --chat-gutter: calc(var(--chat-w) + var(--chat-gap) + 18px); /* reserved right space */
+      --game-col: calc(100vw - 12px - var(--chat-gutter));   /* width of the game column (#app) */
+    }
+    body{ padding-right: var(--chat-gutter); }
+    #chat{
+      position:fixed; top:calc(24px + 65.48px); bottom:24px; right:auto;
+      width: var(--chat-w);
+      /* left = game's right edge + gap. Game right = leftpad(12) + col/2 +
+         min(game, col)/2, so it tracks the game whether it's full or shrunk. */
+      left: calc(12px + var(--game-col)/2 + min(var(--game-w), var(--game-col))/2 + var(--chat-gap));
+      margin:0; z-index:20;
+    }
+    #chat-messages{ flex:1 1 auto; height:auto; min-height:0; } /* grow to fill the panel */
+    #chat.collapsed{ bottom:auto; }                             /* shrink to just the header */
+  }
   #chat-status{ font-size:12px; color:var(--text-secondary); min-height:16px; margin-left:auto; text-align:right; }
 
   /* --- WebGL CRT overlay (pixi-filters) --- */
@@ -532,6 +568,8 @@
 </head>
 <body>
 
+  <div id="app">
+  <div id="app-main">
   <nav id="navbar">
     <span class="nav-logo" aria-label="Slime Volleyball 2">
       <svg class="nav-slime" viewBox="0 3 40 28" role="img" aria-hidden="true">
@@ -603,6 +641,7 @@
 
   <div id="controls">
     <div id="controlhint"></div>
+    <div id="powerhint" style="display:none;"></div>
     <div id="btns">
       <button id="onlinebtn">Online</button>
       <button id="winmodebtn" style="display:none;">Mode: First to 6</button>
@@ -687,6 +726,7 @@
     </div>
     <div id="lobbystatus" style="margin-top:10px; font-size:13px; color:var(--text-secondary); min-height:18px;"></div>
   </div>
+  </div><!-- /#app-main -->
 
   <div id="chat">
     <div id="chat-header">
@@ -713,6 +753,7 @@
     </div>
     <div id="chat-emoji-picker" aria-hidden="true"></div>
   </div>
+  </div><!-- /#app -->
 
   <div id="touchpad">
     <span id="joyopacity-eye" role="button" tabindex="0" aria-label="Hide controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/><line class="eye-slash" x1="3" y1="3" x2="21" y2="21"/></svg></span>
@@ -732,7 +773,7 @@
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
   <footer id="version">
-    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.14.2</span>
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.15.0</span>
     <span id="footer-social">
       <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
       <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
@@ -781,7 +822,7 @@
   // the court width and positioned so the sand court's front line sits on GROUND.
   var beachImg = new Image(); var beachReady = false;
   beachImg.onload = function(){ beachReady = true; };
-  beachImg.src = 'Beach_volleyball.webp';
+  beachImg.src = 'Beach_Scene.webp';
   var BEACH_SKY = '#068cfc';     // fills any strip above the artwork (matches its top)
   var BEACH_FLOOR_SRC = 828;     // source row of the court's front line
 
@@ -856,7 +897,7 @@
   var SPIKE_TRAIL_FRAMES = 30;        // how long the wave trail streams off a spike
   var SPIKE_GHOST_FRAMES = 20;        // after-image lifetime (frames) of the blended shadow trail
   var SPIKE_GHOST_STEPS  = 8;         // minimum dome stamps along the trail (density floor)
-  var SPIKE_GHOST_BLUR   = 4;         // px of GPU canvas blur used to soften the trail
+  var SPIKE_GHOST_BLUR   = 8;         // px of GPU canvas blur (motion-blur softness of the trail)
   // Counter (press down as a spiked ball reaches your side): get under it and
   // spring it gently back up into a controllable volley instead of conceding.
   var COUNTER_UP      = 5.5;          // upward pop speed of a countered ball
@@ -890,6 +931,9 @@
   var counterSeq = 0, _lastCounterShown = 0; // popup cue: bumped on a successful counter
 
   var p1, p2, ball, scores, state, server, twoPlayer=false;
+  // Manual pause for offline play (Enter key / tap the game screen). Online is
+  // NOT pausable — rollback runs in lockstep, so a local freeze would desync.
+  var userPaused = false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
   var netMode = null;
   var netPaused = false; // true while the opponent is mid-reconnect (grace window)
@@ -946,7 +990,8 @@
   // collisions are identical regardless of skin/size — and online stays
   // deterministic since the size only affects drawing (see drawBall).
   var BALL_BOSS = [
-    { name:'Volleyball', style:'volleyball', rmul:1.3 }
+    { name:'Volleyball', style:'volleyball', rmul:1.3 },
+    { name:'Beach Ball', style:'beachball', rmul:1.3 }
   ];
   var ballSkin = ''; // '' = plain colored ball; otherwise a BALL_BOSS name
   function ballBossByName(n){ for(var i=0;i<BALL_BOSS.length;i++){ if(BALL_BOSS[i].name===n) return BALL_BOSS[i]; } return null; }
@@ -958,6 +1003,11 @@
   volleyImg.crossOrigin = 'anonymous';
   volleyImg.onload = function(){ volleyReady = true; };
   volleyImg.src = 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f3d0/emoji.svg';
+  // 'Beach Ball' ball skin: the hand-drawn volleyball (transparent SVG), drawn round in drawBall.
+  var beachBallImg = new Image();
+  var beachBallReady = false;
+  beachBallImg.onload = function(){ beachBallReady = true; };
+  beachBallImg.src = 'Beach_Volleyball.svg';
   function skinDark(hex){ return darken(hex, 0.45); }
 
   // In online play, each side's scoreboard label shows the player's chosen
@@ -1057,6 +1107,12 @@
     if(b) b.textContent = 'Rules: ' + gameModeLabel(gameMode);
     var sp = document.getElementById('joystick-spike');
     if(sp) sp.style.display = (gameMode === 'power') ? '' : 'none';
+    // Power Slime spike/counter hint, shown only when those moves are active.
+    var ph = document.getElementById('powerhint');
+    if(ph){
+      ph.innerHTML = 'Power Slime: <b style="color:#fff36b">S</b> to spike, or block / counter / dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
+      ph.style.display = (gameMode === 'power') ? '' : 'none';
+    }
   }
   function updateWinModeBtn(){
     var b = document.getElementById('winmodebtn');
@@ -1094,16 +1150,19 @@
     updateDots();
   }
   function updateLabels(){
-    document.getElementById('p1name').textContent = 'BLUE SLIME';
+    // The local player's slime shows their chat username once they've set one.
+    document.getElementById('p1name').textContent = chatNameCustom ? chatUsername.toUpperCase() : 'BLUE SLIME';
     document.getElementById('p2name').textContent = twoPlayer ? 'PINK SLIME' : curOpp().name.toUpperCase();
     document.getElementById('oppbtn').style.display = twoPlayer ? 'none' : '';
     document.getElementById('oppbtn').textContent = 'Opponent: ' + curOpp().name;
     document.getElementById('modebtn').textContent = 'Mode: ' + (twoPlayer ? '2 Player' : '1 Player');
     var hint = document.getElementById('controlhint');
+    // Extra single-player hotkeys shown next to the movement keys.
+    var extra = ' &nbsp;&middot;&nbsp; Pause: <b>Enter</b>';
     if(twoPlayer){
-      hint.innerHTML = 'Blue: <b>A / W / D</b> &nbsp;&middot;&nbsp; Pink: <b>J / I / L</b> or <b>&larr; &uarr; &rarr;</b>';
+      hint.innerHTML = 'Blue: <b>A / W / D</b> &nbsp;&middot;&nbsp; Pink: <b>J / I / L</b> or <b>&larr; &uarr; &rarr;</b>' + extra;
     } else {
-      hint.innerHTML = 'Move/jump: <b>A / W / D</b> or <b>&larr; &uarr; &rarr;</b>';
+      hint.innerHTML = 'Move/jump: <b>A / W / D</b> or <b>&larr; &uarr; &rarr;</b>' + extra;
     }
   }
 
@@ -1139,6 +1198,7 @@
       resetPositions(server);
       ball.live = true;
       state = 'play';
+      userPaused = false; // never start a point already paused
       if(!simReplaying) hideMsg();
     }
   }
@@ -1271,12 +1331,12 @@
     // A rare rollback may re-arm it; harmless since draw() only runs post-replay.
     spikeFxT = SPIKE_FX_FRAMES; spikeFxX = ball.x; spikeFxY = ball.y;
     ballSpikeTrailT = SPIKE_TRAIL_FRAMES;
-    // After-image: trace the leap from the start point (gx0,gy0) up to the smash
-    // point (s.x,s.y). Tinted with the slime's own dark shade (dark blue for the
-    // blue slimes) so the ghosts read as analogous to whoever spiked.
+    // After-image: a motion blur of the leap from the start point (gx0,gy0) up to
+    // the smash point (s.x,s.y). Uses the slime's BODY color (not its dark shade)
+    // so it reads as a blurred copy of the slime itself, not a cast shadow.
     spikeGhostX0 = gx0; spikeGhostY0 = gy0;
     spikeGhostX1 = s.x; spikeGhostY1 = s.y;
-    spikeGhostR = s.r; spikeGhostCol = s.cold;
+    spikeGhostR = s.r; spikeGhostCol = s.col;
     spikeGhostT = SPIKE_GHOST_FRAMES;
   }
   // A spiked ball heading onto slime s's side can be COUNTERED: any time it's
@@ -1762,6 +1822,20 @@
       ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 6 + 2 * pulse, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
+    if(sk && sk.style === 'beachball' && beachBallReady){
+      // Round ball: clip to a circle and COVER-fit the image so it fills the
+      // disc, centered, without distortion. Dark ring for contrast.
+      ctx.fillStyle = '#241700';
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, vr + 1.5, 0, Math.PI*2); ctx.fill();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, vr, 0, Math.PI*2); ctx.clip();
+      var biw = beachBallImg.naturalWidth, bih = beachBallImg.naturalHeight;
+      var bs = (2*vr) / Math.min(biw, bih);   // cover the disc
+      var bdw = biw * bs, bdh = bih * bs;
+      ctx.drawImage(beachBallImg, ball.x - bdw/2, ball.y - bdh/2, bdw, bdh);
+      ctx.restore();
+      return;
+    }
     if(sk && sk.style === 'volleyball' && volleyReady){
       // Dark backing disc so the light emoji reads against bright backdrops; it
       // peeks out around the ball as an outline.
@@ -1777,15 +1851,15 @@
     ctx.beginPath(); ctx.arc(ball.x, ball.y, vr, 0, Math.PI*2); ctx.fill();
   }
 
-  // Blended spike after-image: a soft shadow trail tracing the leap, built in an
+  // Blended spike after-image: a soft MOTION BLUR of the leap, built in an
   // offscreen buffer so it reads as one smooth shape instead of discrete steps.
-  //   1) stamp a dense run of solid slime domes from launch -> smash (overlaps
-  //      merge into a clean union, with no per-step alpha banding),
+  //   1) stamp a dense run of body-colored slime domes from launch -> smash
+  //      (overlaps merge into a clean union, with no per-step alpha banding),
   //   2) fade that union along the path via a gradient alpha mask (solid at the
   //      smash end, vanishing at the launch end),
   //   3) composite it onto the game canvas through a GPU canvas blur for a soft
-  //      shadow. `gtl` is the 1 -> 0 lifetime fade. (When a CRT filter is on this
-  //      also flows through the WebGL post-pass, since it lands on #game.)
+  //      motion blur. `gtl` is the 1 -> 0 lifetime fade. (When a CRT filter is on
+  //      this also flows through the WebGL post-pass, since it lands on #game.)
   function drawSpikeGhost(gtl){
     if(!ghostCv){
       ghostCv = document.createElement('canvas');
@@ -1841,7 +1915,7 @@
     ctx.fillStyle = 'rgba(150,200,255,0.98)'; ctx.fillText('BLOCK', BLOCK_ZONE_CX, BLOCK_ZONE_BOTTOM - 4); // bottom of the block column
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillStyle = 'rgba(255,200,110,0.95)'; ctx.fillText('COUNTER', 8, DIG_ZONE_TOP + 4 - 18); // 18px above DIG
-    ctx.fillStyle = 'rgba(120,230,150,0.98)'; ctx.fillText('DIG', 8, DIG_ZONE_TOP + 4);          // top of the dig band (unchanged)
+    ctx.fillStyle = 'rgba(120,230,150,0.98)'; ctx.fillText('DIG', 8, DIG_ZONE_TOP + 7);          // just inside the top of the dig band
     ctx.restore();
   }
 
@@ -1960,6 +2034,21 @@
       ctx.stroke();
       ctx.restore();
       spikeFxT--;
+    }
+    // PAUSED overlay (offline manual pause): dim the court and show how to resume.
+    if(userPaused){
+      ctx.save();
+      ctx.fillStyle = 'rgba(10,14,26,0.55)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = "34px 'PixelTitle','PixelBold',monospace";
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('PAUSED', W/2, H/2 - 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.font = "11px 'PixelBold',monospace";
+      ctx.fillText(isTouch() ? 'Tap to resume' : 'Press Enter to resume', W/2, H/2 + 22);
+      ctx.restore();
     }
   }
 
@@ -2539,7 +2628,7 @@
       // Online: the rollback engine drives the simulation (send input, predict
       // the opponent, advance one frame or stall, re-sim on misprediction).
       rbTick();
-    } else if(state==='play'){
+    } else if(state==='play' && !userPaused){ // offline; frozen while manually paused
       if(twoPlayer){
         moveSlime(p1, keys['a']||keys['A'], keys['d']||keys['D'], keys['w']||keys['W'], MOVE);
         var p2l = keys['j']||keys['J']||keys['ArrowLeft'];
@@ -2600,6 +2689,16 @@
     if(netMode) return; // online: serving is an in-sim input (jump while it's your serve)
     if(state!=='play') startPoint();
   }
+  // Manual pause, offline only and only during active play (Enter / tap screen).
+  function togglePause(){
+    if(netMode || state !== 'play') return;
+    userPaused = !userPaused;
+  }
+  // A tap/click on the play area: pause/resume during play, otherwise serve.
+  function onScreenTap(){
+    if(!netMode && state === 'play') togglePause();
+    else tryServe();
+  }
 
   function isTypingTarget(t){
     if(!t) return false;
@@ -2611,6 +2710,7 @@
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].indexOf(e.key)>=0) e.preventDefault();
     keys[e.key] = true;
     if(e.key===' '){ tryServe(); }
+    if(e.key==='Enter'){ e.preventDefault(); togglePause(); } // pause/resume offline play
     if(e.key==='c' || e.key==='C'){ DEBUG_COUNTER_ZONES = !DEBUG_COUNTER_ZONES; } // toggle counter-zone debug overlay
   });
   window.addEventListener('keyup', function(e){
@@ -2618,7 +2718,11 @@
     keys[e.key] = false;
   });
 
-  cv.addEventListener('click', function(){ tryServe(); });
+  // Tap/click the play area to serve, or to pause/resume during offline play.
+  // Bound to the pixi-canvas too, since it sits on top when a CRT filter is on.
+  cv.addEventListener('click', onScreenTap);
+  var pixiCanvasEl = document.getElementById('pixi-canvas');
+  if(pixiCanvasEl) pixiCanvasEl.addEventListener('click', onScreenTap);
 
   function isTouch(){ return ('ontouchstart' in window) || navigator.maxTouchPoints>0; }
   var touchpadEl = document.getElementById('touchpad');
@@ -3238,9 +3342,10 @@
 
   // ===================== CHAT =====================
   var chatUsername = 'Player';
+  var chatNameCustom = false; // true once the player sets a name -> it also labels their slime
   try{
     var storedName = localStorage.getItem('slimeChatUsername');
-    if(storedName){ chatUsername = storedName; }
+    if(storedName){ chatUsername = storedName; chatNameCustom = true; }
   }catch(e){}
 
   var chatMessages    = document.getElementById('chat-messages');
@@ -3344,6 +3449,7 @@
     var v = (chatNameInput.value || '').trim().slice(0, 16);
     if(!v) return;
     chatUsername = v;
+    chatNameCustom = true;
     try{ localStorage.setItem('slimeChatUsername', chatUsername); }catch(e){}
     chatRenderUsername();
     chatAppendSystem('Username set to ' + chatUsername);
@@ -3351,6 +3457,8 @@
     if(netMode){
       netSend({type:'name', name: chatUsername});
       updateScoreboardNames();
+    } else {
+      updateLabels(); // reflect the new name on the single-player scoreboard
     }
   }
   chatNameSave.addEventListener('click', chatSaveUsername);
@@ -3530,6 +3638,25 @@
   init();
   updateSkinPickerVisibility();
   setMsg('SLIME<br>VOLLEYBALL 2', 'PRESS SPACE OR TAP');
+
+  // Cap the fixed chat side-panel's height to the game column (#app). CSS can't
+  // read another element's height, so mirror it here; only in the desktop
+  // side-panel layout (cleared otherwise so the in-flow bottom panel is free).
+  (function(){
+    var chatEl = document.getElementById('chat');
+    var appEl  = document.getElementById('app');
+    if(!chatEl || !appEl) return;
+    var sideMQ = window.matchMedia('(min-width:1100px)');
+    function syncChatHeight(){
+      if(sideMQ.matches){ chatEl.style.maxHeight = (appEl.getBoundingClientRect().height - 65.48) + 'px'; }
+      else { chatEl.style.maxHeight = ''; }
+    }
+    syncChatHeight();
+    window.addEventListener('resize', syncChatHeight);
+    if(sideMQ.addEventListener) sideMQ.addEventListener('change', syncChatHeight);
+    if(window.ResizeObserver) new ResizeObserver(syncChatHeight).observe(appEl);
+  })();
+
   requestAnimationFrame(loop);
 
   // If we were in an online room before a refresh, transparently rejoin it.
