@@ -163,6 +163,10 @@
   var rb = null;
   // Round-trip latency to the relay for each side (shown in the ping indicator).
   var myPing = 0, peerPing = 0, pingTimer = null;
+  // Which transport gameplay is actually on, for the on-screen indicator:
+  // '' = relay (WS fallback), 'direct' = direct P2P, 'turn' = P2P via TURN relay.
+  // rtcRtt is the measured peer round-trip over the data channel (ms).
+  var rtcTransport = '', rtcRtt = 0;
   function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
 
   var BLUE = '#2f7fd6', BLUE_D = '#1c3f6e';
@@ -1313,7 +1317,20 @@
   // (restrictive NAT, old browser), inputs just keep flowing over the relay, so
   // online play always works. The host is the offerer, the guest the answerer.
   var pc = null, dc = null, pendingIce = [];
-  var RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  // ICE servers. STUN lets peers discover a DIRECT path (preferred — lowest
+  // latency). TURN relays the P2P traffic ONLY when a direct path can't be formed
+  // (strict NAT/firewall); ICE always ranks direct (host/srflx) above relay, so
+  // TURN is a fallback, never the default. NOTE: these are FREE public Open Relay
+  // credentials for testing — swap in your own (Metered/Twilio/self-hosted coturn)
+  // for production reliability/throughput.
+  var RTC_CONFIG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+  };
   function noop(){}
   function rtcSupported(){ return typeof RTCPeerConnection !== 'undefined'; }
   function rtcConnected(){ return dc && dc.readyState === 'open'; }
@@ -1332,7 +1349,7 @@
   function rtcBindChannel(ch){
     dc = ch;
     ch.onopen = function(){ if(typeof updatePingUI === 'function') updatePingUI(); };
-    ch.onclose = noop;
+    ch.onclose = function(){ rtcTransport = ''; rtcRtt = 0; if(typeof updatePingUI === 'function') updatePingUI(); };
     ch.onmessage = function(ev){ var m; try{ m = JSON.parse(ev.data); }catch(e){ return; } handleNetMessage(m); };
   }
   function rtcStart(isOfferer){
@@ -1362,6 +1379,26 @@
   function rtcCleanup(){
     if(dc){ try{ dc.close(); }catch(e){} dc = null; }
     if(pc){ try{ pc.close(); }catch(e){} pc = null; }
+    rtcTransport = ''; rtcRtt = 0;
+  }
+  // Poll the live connection to learn (a) whether the selected ICE path is DIRECT
+  // or TURN-relayed, and (b) the real peer round-trip — for the transport readout.
+  function rtcStatsTick(){
+    if(!pc || !rtcConnected()){ if(rtcTransport){ rtcTransport=''; rtcRtt=0; updatePingUI(); } return; }
+    if(!pc.getStats){ rtcTransport = rtcTransport || 'direct'; return; }
+    pc.getStats(null).then(function(stats){
+      var byId = {}, sel = null, selId = null;
+      stats.forEach(function(r){ byId[r.id] = r; });
+      stats.forEach(function(r){ if(r.type === 'transport' && r.selectedCandidatePairId) selId = r.selectedCandidatePairId; });
+      if(selId && byId[selId]) sel = byId[selId];
+      if(!sel){ stats.forEach(function(r){ if(r.type === 'candidate-pair' && (r.nominated || r.selected) && r.state === 'succeeded') sel = r; }); }
+      if(!sel){ rtcTransport = 'direct'; updatePingUI(); return; } // open but pair not reported yet
+      var lc = byId[sel.localCandidateId], rc = byId[sel.remoteCandidateId];
+      var relayed = (lc && lc.candidateType === 'relay') || (rc && rc.candidateType === 'relay');
+      rtcTransport = relayed ? 'turn' : 'direct';
+      if(typeof sel.currentRoundTripTime === 'number') rtcRtt = sel.currentRoundTripTime * 1000;
+      updatePingUI();
+    }).catch(noop);
   }
   // =================== END WEBRTC TRANSPORT ===================
 
@@ -1380,12 +1417,26 @@
     opp.textContent = peerPing ? Math.round(peerPing)+'ms' : '--';
     you.className = 'ping-val ' + pingClass(myPing   || 999);
     opp.className = 'ping-val ' + pingClass(peerPing || 999);
+    // Transport readout: what gameplay is ACTUALLY using right now.
+    var net = document.getElementById('ping-net');
+    if(net){
+      if(rtcConnected()){
+        var rttTxt = rtcRtt ? ' ' + Math.round(rtcRtt) + 'ms' : '';
+        if(rtcTransport === 'turn'){ net.textContent = 'TURN' + rttTxt; net.className = 'ping-val ok'; }
+        else { net.textContent = 'P2P' + rttTxt; net.className = 'ping-val ' + (rtcRtt ? pingClass(rtcRtt) : 'good'); }
+      } else {
+        net.textContent = 'RELAY'; net.className = 'ping-val bad';
+      }
+    }
   }
   function startPing(){
     stopPing();
-    myPing = 0; peerPing = 0;
+    myPing = 0; peerPing = 0; rtcTransport = ''; rtcRtt = 0;
     updatePingUI();
-    var probe = function(){ if(ws && ws.readyState === WebSocket.OPEN){ netSend({type:'ping', t: nowMs()}); } };
+    var probe = function(){
+      if(ws && ws.readyState === WebSocket.OPEN){ netSend({type:'ping', t: nowMs()}); }
+      rtcStatsTick(); // refresh the transport (P2P/TURN/relay) + peer RTT readout
+    };
     probe();
     pingTimer = setInterval(probe, 1000);
   }
@@ -1631,7 +1682,7 @@
     document.getElementById('p2name').textContent = 'PINK';
     document.getElementById('oppbtn').style.display = 'none';
     document.getElementById('modebtn').style.display = 'none';
-    document.getElementById('gamemodebtn').style.display = 'none'; // locked online (host's pick is synced below)
+    document.getElementById('gamemodebtn').style.display = asHost ? '' : 'none'; // host can change the ruleset mid-match; guest follows
     document.getElementById('resetbtn').style.display = 'none';
     document.getElementById('leavebtn').style.display = '';
     // Only the host can pick the points-to-win; the guest follows via 'config'.
@@ -1772,7 +1823,8 @@
     }
     if(m.type === 'gamemode' && (m.mode === 'classic' || m.mode === 'power')){
       gameMode = m.mode;   // guest adopts the host's ruleset (Classic/Power)
-      updateGameModeUI();  // sync the touch SPIKE button visibility
+      updateGameModeUI();  // sync the touch SPIKE button / power hint visibility
+      if(m.restart) startRematch(); // host changed it mid-match -> reset both sims in lockstep
       return;
     }
 
@@ -2235,12 +2287,20 @@
   });
   // Ruleset toggle: Classic Slime (default) <-> Power Slime (spike enabled).
   document.getElementById('gamemodebtn').addEventListener('click', function(){
-    if(netMode) return; // locked during an online match; the host picks it first
+    if(netMode === 'guest') return; // online: only the host sets the ruleset; the guest follows
     gameMode = (gameMode === 'power') ? 'classic' : 'power';
     try{ localStorage.setItem('slimeGameMode', gameMode); }catch(e){}
     updateGameModeUI();
-    init();
-    setMsg('SLIME<br>VOLLEYBALL 2', gameModeLabel(gameMode).toUpperCase() + ' MODE');
+    if(netMode === 'host'){
+      // gameMode is read live by the deterministic sim, so a mid-rally change
+      // would desync. Sync the new ruleset and restart BOTH rollback sims in
+      // lockstep (a fresh game under the new rules — scores reset).
+      netSend({type:'gamemode', mode: gameMode, restart:true});
+      startRematch();
+    } else {
+      init();
+      setMsg('SLIME<br>VOLLEYBALL 2', gameModeLabel(gameMode).toUpperCase() + ' MODE');
+    }
   });
   updateGameModeUI(); // reflect the persisted/default ruleset on load
   // Online host: cycle the points-to-win. setWin() rebuilds the dot row + "FIRST
