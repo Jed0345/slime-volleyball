@@ -1,16 +1,23 @@
 {
   "name": "slime-volleyball-2-multiplayer",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "description": "Slime Volleyball 2 with online multiplayer via a WebSocket relay.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "relay": "node server.js",
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vite": "^5.4.21"
   }
 }

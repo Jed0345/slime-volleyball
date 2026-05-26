@@ -15,7 +15,9 @@ const path = require("path");
 const { WebSocketServer } = require("ws");
 
 const PORT = process.env.PORT || 8080;
-const PUBLIC_DIR = path.join(__dirname, "public");
+// Serves the Vite build output. Run `npm run build` first; for local dev with
+// hot reload use `npm run dev` (Vite) instead and this server just as the relay.
+const PUBLIC_DIR = path.join(__dirname, "dist");
 
 // roomCode -> { host: ws|null, guest: ws|null }
 const rooms = new Map();
