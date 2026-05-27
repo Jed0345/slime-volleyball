@@ -3118,6 +3118,14 @@
     // Put Leave in the Create row so it can replace Create when connected.
     var _cb0 = document.getElementById('createbtn'), _lb0 = document.getElementById('leavebtn');
     if(_cb0 && _lb0 && _cb0.parentNode) _cb0.parentNode.appendChild(_lb0);
+    // TEMP: a row below the game holding the category bar (left) + sound button (right).
+    var _stg = document.getElementById('stage');
+    if(bar && _stg && _stg.parentNode){
+      var _row = document.createElement('div'); _row.id = 'menu-row';
+      _stg.parentNode.insertBefore(_row, _stg.nextSibling);
+      _row.appendChild(bar); bar.classList.add('below-game');
+      var _mus = document.getElementById('musicbtn'); if(_mus) _row.appendChild(_mus);
+    }
 
     var activeCat = null;
     function setCat(cat){
@@ -3156,10 +3164,11 @@
     });
     // Outside click / Escape closes the whole menu.
     document.addEventListener('click', function(e){
-      if(!bar.classList.contains('open')) return;
-      if(bar.contains(e.target) || panel.contains(e.target) || btn.contains(e.target)) return;
-      closeAll();
-    });
+      if(!panel.classList.contains('open')) return;        // only when a category panel is showing
+      if(panel.contains(e.target) || bar.contains(e.target)) return; // ignore clicks inside the menu
+      setCat(null);          // a click anywhere else (incl. the game screen) closes the menu
+      e.stopPropagation();   // ...without also pausing/serving from the canvas tap
+    }, true);
     document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeAll(); });
     // Chat button (bottom-centre) reveals + focuses the side-panel chat.
     var chatBtn = document.getElementById('chat-btn');
