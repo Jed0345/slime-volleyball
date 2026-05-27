@@ -1599,7 +1599,9 @@
       inputDelay: computeInputDelay(), // adaptive; retuned each second (see rtcStatsTick)
       // --- clock sync (frame-advantage time-skip) ---
       localAdv: 0,              // how many frames WE'VE simulated past the peer's last confirmed input
-      remoteAdv: 0,             // the same number the PEER reports about itself
+      localAdvAvg: 0,           // smoothed (EMA) localAdv — the value we actually act on / send
+      remoteAdv: 0,             // the smoothed advantage the PEER reports about itself
+      remoteInputDelay: INPUT_DELAY_MIN, // peer's current input delay (cancels the skew bias)
       ticks: 0,                 // rbTick calls (advances even on a skipped frame)
       lastSkipTick: -99,        // last tick we voluntarily held a frame
       // --- desync detection (state checksum exchange) ---
@@ -1632,26 +1634,35 @@
     var applyF = rb.frame + rb.inputDelay;
     if(rb.local[applyF] === undefined){ rb.local[applyF] = sampleLocalInput(); } // lock this frame's input once
     // How far ahead we are of the newest input we've actually confirmed from the
-    // peer. We tell them this number; they tell us theirs (see rbOnRemoteInput).
+    // peer. This sawtooths between packet arrivals, so we smooth it (EMA) before
+    // using it for clock sync. We send the smoothed value plus our current input
+    // delay; the peer does the same (see rbOnRemoteInput).
     rb.localAdv = rb.frame - rb.lastRemoteFrame;
+    rb.localAdvAvg = rb.localAdvAvg * 0.9 + rb.localAdv * 0.1;
     // Send the newest frame plus a redundant window of recent ones, packed one
     // byte per frame (bit0 left, bit1 right, bit2 jump, bit3 spike). Sent every tick so the
     // unreliable channel self-heals dropped packets; the WS fallback dedupes by
-    // frame, so resends are harmless. 'a' piggybacks our frame advantage.
+    // frame, so resends are harmless. 'a' = smoothed frame advantage, 'd' = our
+    // input delay (so the peer can cancel the delay bias from the skew, below).
     var hist = [];
     for(var hf = applyF - INPUT_REDUNDANCY + 1; hf <= applyF; hf++){
       var li = (hf >= 0 && rb.local[hf]) ? rb.local[hf] : NOINPUT;
       hist.push((li.left?1:0) | (li.right?2:0) | (li.jump?4:0) | (li.spike?8:0));
     }
-    rtcSend({type:'in', f:applyF, n:hist, a:rb.localAdv});
+    rtcSend({type:'in', f:applyF, n:hist, a:Math.round(rb.localAdvAvg*100)/100, d:rb.inputDelay});
 
-    // CLOCK SYNC (frame-advantage time-skip). If we've drifted ahead of the peer
-    // in real time, voluntarily hold this frame so the two sims stay glued ~1-2
-    // frames apart instead of sprinting until we slam into MAX_ROLLBACK and hard-
-    // stall. We're "ahead" when our advantage exceeds theirs; only the leading
-    // side yields. Capped at ~1 held frame in 3 so packet loss can't freeze us
-    // (in that case we still advance and the MAX_ROLLBACK stall below takes over).
-    if(rb.lastRemoteFrame >= 0 && (rb.localAdv - rb.remoteAdv) >= 2 && (rb.ticks - rb.lastSkipTick) >= 3){
+    // CLOCK SYNC (frame-advantage time-skip). If we've genuinely drifted ahead of
+    // the peer in real time, voluntarily hold a frame so the two sims stay glued
+    // together instead of sprinting until we slam into MAX_ROLLBACK and hard-stall.
+    //
+    // The raw advantage difference carries a constant bias equal to the gap in the
+    // two peers' (adaptive) input delays, which is NOT real drift — left in, it
+    // makes the higher-delay peer skip forever (= slow motion). We cancel it with
+    // (rb.inputDelay - rb.remoteInputDelay). The result is ~2x our true lead, so a
+    // value >= 2 means we're a full frame ahead. Smoothed + capped at ~1 skip in 6
+    // so steady play never skips (no slow-mo); only real drift triggers a yield.
+    var skew = (rb.localAdvAvg - rb.remoteAdv) - (rb.inputDelay - rb.remoteInputDelay);
+    if(rb.lastRemoteFrame >= 0 && skew >= 2 && (rb.ticks - rb.lastSkipTick) >= 6){
       rb.lastSkipTick = rb.ticks;
       return; // input already sent above; just don't advance the sim this tick
     }
@@ -1691,7 +1702,8 @@
   // forward to the present. Order/duplicates don't matter — frames are keyed.
   function rbOnRemoteInput(m){
     if(!rb || !m.n) return;
-    if(typeof m.a === 'number') rb.remoteAdv = m.a; // peer's frame advantage, for clock sync
+    if(typeof m.a === 'number') rb.remoteAdv = m.a; // peer's smoothed frame advantage, for clock sync
+    if(typeof m.d === 'number') rb.remoteInputDelay = m.d; // peer's input delay, to cancel the skew bias
     var end = m.f|0, arr = m.n, earliest = -1;
     for(var i=0; i<arr.length; i++){
       var fr = end - (arr.length - 1) + i;
