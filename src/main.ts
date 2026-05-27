@@ -228,11 +228,20 @@
   var beachBallReady = false;
   beachBallImg.onload = function(){ beachBallReady = true; };
   beachBallImg.src = 'Beach_Volleyball.svg';
+  var shadesImg = new Image(); var shadesReady = false;
+  shadesImg.onload = function(){ shadesReady = true; };
+  shadesImg.src = 'shades.svg';
   function skinDark(hex){ return darken(hex, 0.45); }
 
   // In online play, each side's scoreboard label shows the player's chosen
   // chat username. The remote name is whatever the peer last broadcast.
   var peerName = '';
+  // Insert a soft hyphen (U+00AD) between every character so a too-long name wraps
+  // WITH a visible dash at the break. A plain word-break shows no dash, and CSS
+  // hyphens:auto only fires on real dictionary words — not on ALL-CAPS usernames.
+  // The soft hyphen is invisible unless a line break actually lands on it.
+  // Array.from() splits by code point so emoji/multi-byte names aren't broken.
+  function softHyphens(s){ return Array.from(s == null ? '' : String(s)).join('­'); }
   function updateScoreboardNames(){
     if(!netMode) return; // offline: updateLabels() handles defaults
     var localName = (typeof chatUsername === 'string' && chatUsername) ? chatUsername : 'PLAYER';
@@ -240,11 +249,11 @@
     var p1lbl = document.getElementById('p1name');
     var p2lbl = document.getElementById('p2name');
     if(netMode === 'host'){
-      p1lbl.textContent = localName.toUpperCase();
-      p2lbl.textContent = remoteName.toUpperCase();
+      p1lbl.textContent = softHyphens(localName.toUpperCase());
+      p2lbl.textContent = softHyphens(remoteName.toUpperCase());
     } else {
-      p1lbl.textContent = remoteName.toUpperCase();
-      p2lbl.textContent = localName.toUpperCase();
+      p1lbl.textContent = softHyphens(remoteName.toUpperCase());
+      p2lbl.textContent = softHyphens(localName.toUpperCase());
     }
   }
 
@@ -371,11 +380,11 @@
   }
   function updateLabels(){
     // The local player's slime shows their chat username once they've set one.
-    document.getElementById('p1name').textContent = chatNameCustom ? chatUsername.toUpperCase() : 'BLUE SLIME';
+    document.getElementById('p1name').textContent = softHyphens(chatNameCustom ? chatUsername.toUpperCase() : 'BLUE SLIME');
     // In local 2-player, Player 2 (pink) shows its own chat-set name; otherwise
     // it's the AI opponent's name (1P) or PINK SLIME (default 2P).
-    document.getElementById('p2name').textContent =
-      twoPlayer ? (p2NameCustom ? p2Username.toUpperCase() : 'PINK SLIME') : curOpp().name.toUpperCase();
+    document.getElementById('p2name').textContent = softHyphens(
+      twoPlayer ? (p2NameCustom ? p2Username.toUpperCase() : 'PINK SLIME') : curOpp().name.toUpperCase());
     // The Player 2 name field only makes sense in local 2-player; the P1 label is
     // clarified to "Blue Slime:" there so the two fields read as Blue/Pink.
     var local2P = twoPlayer && !netMode;
@@ -926,6 +935,20 @@
     var pr = er*0.5;
     ctx.fillStyle = outline;
     ctx.beginPath(); ctx.arc(ex+Math.cos(ang)*er*0.45, ey+Math.sin(ang)*er*0.45, pr, 0, Math.PI*2); ctx.fill();
+    // The White Slime wears shades (shades.svg): scaled to the slime, centred
+    // over the eye and mirrored to face the way it's looking. Drawn once loaded.
+    if(s.col === '#f3f3f3' && shadesReady && theme === 'beach'){
+      var dir = faceRight ? 1 : -1;
+      var sw = s.r * 1.15;             // shades width relative to the dome radius
+      var sh = sw * 0.380;             // shades.svg aspect (viewBox 28.45 x 10.81)
+      var scx = s.x + dir * s.r * 0.28 + 4;  // nudged 4px screen-right
+      var scy = s.y - s.r * 0.48;
+      ctx.save();
+      ctx.translate(scx, scy);
+      if(dir > 0) ctx.scale(-1, 1);    // shades.svg faces left by default; mirror to face right
+      ctx.drawImage(shadesImg, -sw/2, -sh/2, sw, sh);
+      ctx.restore();
+    }
   }
 
   // Static background decorations (positioned relative to field width/ground).
@@ -2272,7 +2295,7 @@
   })();
   var themeBtn = document.getElementById('themebtn');
   var THEMES = ['grassy', 'city', 'beach'];
-  function applyTheme(){ themeBtn.textContent = 'Theme: ' + theme.charAt(0).toUpperCase() + theme.slice(1); }
+  function applyTheme(){ themeBtn.textContent = 'Stage: ' + theme.charAt(0).toUpperCase() + theme.slice(1); }
   applyTheme();
   themeBtn.addEventListener('click', function(){
     theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; // cycle grassy -> city -> beach
@@ -2396,6 +2419,7 @@
   //   - Scanlines: even pixel-aligned horizontal scanlines (custom GLSL, no curve)
   //   - Game Boy:  4-shade DMG palette quantization (custom GLSL)
   //   - 3D:        3-channel chromatic aberration (custom GLSL, R/G/B offsets)
+  //   - God Rays:  animated volumetric light shafts (GodrayFilter)
   // The game keeps rendering into #game; when a filter is active, #game is
   // hidden (visibility:hidden so it keeps drawing) and #pixi-canvas displays
   // the filtered output sampled from #game each frame.
@@ -2418,7 +2442,10 @@
       chain:['gameboy'] },
     { key:'3d',       label:'3D',
       chain:['chromatic'],
-      chromatic:{ offset:0.005 } }
+      chromatic:{ offset:0.005 } },
+    { key:'godray',   label:'God Rays',
+      chain:['godray'],
+      godray:{ gain:0.6, lacunarity:2.75, angle:30, parallel:true, alpha:0.5 } }
   ];
   var filterIdx = 0;
   try{
@@ -2434,7 +2461,7 @@
   var pixiApp = null, pixiSprite = null, pixiTex = null;
   var pixiCrt = null, pixiRgb = null, pixiOldFilm = null;
   var pixiBloom = null, pixiDot = null, pixiScanlines = null;
-  var pixiGameboy = null, pixiChromatic = null, pixiReady = false;
+  var pixiGameboy = null, pixiChromatic = null, pixiGodray = null, pixiReady = false;
 
   // Custom shader: subtle phosphor dot mask — soft dark gaps between bright
   // "phosphor dots". uStrength controls how dark the gaps are (0 = invisible,
@@ -2538,12 +2565,14 @@
     pixiScanlines = new PIXI.Filter(null, SCANLINE_FRAGMENT, { uTexHeight: H, uPeriod: 4.0, uDarkness: 0.32 });
     pixiGameboy   = new PIXI.Filter(null, GAMEBOY_FRAGMENT);
     pixiChromatic = new PIXI.Filter(null, CHROMATIC_FRAGMENT, { uOffset: 0.005 });
+    pixiGodray    = new PIXI.filters.GodrayFilter();
     pixiApp.ticker.add(function(){
       // Re-upload the latest 2D canvas frame to the GPU texture.
       pixiTex.baseTexture.update();
       pixiCrt.time += 0.5;
       pixiCrt.seed = Math.random();
       pixiOldFilm.seed = Math.random();
+      pixiGodray.time += 0.01; // drift the god rays' fractal-noise animation
     });
     pixiReady = true;
     return true;
@@ -2608,6 +2637,14 @@
       } else if(step === 'chromatic'){
         pixiChromatic.uniforms.uOffset = f.chromatic.offset;
         filters.push(pixiChromatic);
+      } else if(step === 'godray'){
+        var gr = f.godray;
+        pixiGodray.gain       = gr.gain;
+        pixiGodray.lacunarity = gr.lacunarity;
+        pixiGodray.angle      = gr.angle;
+        pixiGodray.parallel   = !!gr.parallel;
+        pixiGodray.alpha      = gr.alpha;
+        filters.push(pixiGodray);
       }
     }
     pixiSprite.filters = filters;
