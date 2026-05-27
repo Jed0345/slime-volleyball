@@ -2292,12 +2292,17 @@
     try{ localStorage.setItem('slimeGameMode', gameMode); }catch(e){}
     updateGameModeUI();
     if(netMode === 'host'){
-      // gameMode is read live by the deterministic sim, so a mid-rally change
-      // would desync. Sync the new ruleset and restart BOTH rollback sims in
-      // lockstep (a fresh game under the new rules — scores reset).
+      // Connected match: gameMode is read live by the deterministic sim, so a
+      // mid-rally change would desync. Sync the new ruleset and restart BOTH
+      // rollback sims in lockstep (a fresh game under the new rules — scores reset).
       netSend({type:'gamemode', mode: gameMode, restart:true});
       startRematch();
+    } else if(ws && ws.readyState === WebSocket.OPEN){
+      // Online but not matched yet (e.g. host waiting for a guest). Just record
+      // the ruleset — it's sent to the guest when they join. Do NOT start an
+      // offline game (that was the bug: Rules dropped you into single-player).
     } else {
+      // Truly offline (single / local 2-player): restart the local game.
       init();
       setMsg('SLIME<br>VOLLEYBALL 2', gameModeLabel(gameMode).toUpperCase() + ' MODE');
     }
@@ -2394,7 +2399,7 @@
     { key:'off',      label:'Off' },
     { key:'bloom',    label:'Bloom',
       chain:['bloom'],
-      bloom:{ threshold:0.65, bloomScale:0.55, brightness:1.0, blur:7, quality:5 } },
+      bloom:{ threshold:0.65, bloomScale:0.385, brightness:1.0, blur:7, quality:5 } },
     { key:'dot',      label:'Dot Mask',
       chain:['dot'],
       dot:{ size:3.0, strength:0.22 } },
