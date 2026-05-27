@@ -2297,11 +2297,16 @@
   var THEMES = ['grassy', 'city', 'beach'];
   function applyTheme(){ themeBtn.textContent = 'Stage: ' + theme.charAt(0).toUpperCase() + theme.slice(1); }
   applyTheme();
+  // Cycle the stage. The beach scene uses the God Rays filter: choosing beach
+  // switches the active filter to God Rays; leaving beach (if God Rays were on)
+  // switches back to Off, so the rays ride along with the beach scene.
   themeBtn.addEventListener('click', function(){
+    var wasBeach = (theme === 'beach');
     theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; // cycle grassy -> city -> beach
     try{ localStorage.setItem('slimeTheme', theme); }catch(e){}
     applyTheme();
-    applyFilter(); // beach-only god rays turn on/off with the stage
+    if(theme === 'beach') setFilterByKey('godray');
+    else if(wasBeach && FILTERS[filterIdx].key === 'godray') setFilterByKey('off');
   });
   document.getElementById('oppbtn').addEventListener('click', function(){
     oppIdx = (oppIdx+1)%OPPS.length;
@@ -2443,7 +2448,10 @@
       chain:['gameboy'] },
     { key:'3d',       label:'3D',
       chain:['chromatic'],
-      chromatic:{ offset:0.005 } }
+      chromatic:{ offset:0.005 } },
+    { key:'godray',   label:'God Rays',
+      chain:['godray'],
+      godray:{ gain:0.6, lacunarity:2.75, angle:30, parallel:true, alpha:0.5 } }
   ];
   var filterIdx = 0;
   try{
@@ -2576,7 +2584,7 @@
     return true;
   }
 
-  function buildChain(f, beachRays){
+  function buildChain(f){
     var filters = [];
     for(var i=0; i<f.chain.length; i++){
       var step = f.chain[i];
@@ -2635,14 +2643,15 @@
       } else if(step === 'chromatic'){
         pixiChromatic.uniforms.uOffset = f.chromatic.offset;
         filters.push(pixiChromatic);
+      } else if(step === 'godray'){
+        var gr = f.godray;
+        pixiGodray.gain       = gr.gain;
+        pixiGodray.lacunarity = gr.lacunarity;
+        pixiGodray.angle      = gr.angle;
+        pixiGodray.parallel   = !!gr.parallel;
+        pixiGodray.alpha      = gr.alpha;
+        filters.push(pixiGodray);
       }
-    }
-    if(beachRays){
-      // Beach stage ambiance: god rays are always on here, composited on top of
-      // whatever manual filter is selected (including Off).
-      pixiGodray.gain = 0.6; pixiGodray.lacunarity = 2.75; pixiGodray.angle = 30;
-      pixiGodray.parallel = true; pixiGodray.alpha = 0.5;
-      filters.push(pixiGodray);
     }
     pixiSprite.filters = filters;
   }
@@ -2650,10 +2659,7 @@
   function applyFilter(){
     var f = FILTERS[filterIdx];
     filterBtn.textContent = 'Filter: ' + f.label;
-    // God rays are a default, beach-only ambiance: auto-applied on the beach stage
-    // over whatever manual filter is selected (including Off).
-    var beachRays = (theme === 'beach');
-    if(f.key === 'off' && !beachRays){
+    if(f.key === 'off'){
       stageEl.setAttribute('data-filter', 'off');
       return;
     }
@@ -2661,8 +2667,15 @@
       stageEl.setAttribute('data-filter', 'off');
       return;
     }
-    stageEl.setAttribute('data-filter', (f.key === 'off') ? 'godray' : f.key);
-    buildChain(f, beachRays);
+    stageEl.setAttribute('data-filter', f.key);
+    buildChain(f);
+  }
+  // Jump straight to a filter by key (used by the stage switch to toggle the
+  // beach's God Rays on/off).
+  function setFilterByKey(key){
+    for(var i=0; i<FILTERS.length; i++){ if(FILTERS[i].key === key){ filterIdx = i; break; } }
+    try{ localStorage.setItem('slimeFilter', FILTERS[filterIdx].key); }catch(e){}
+    applyFilter();
   }
   applyFilter();
   filterBtn.addEventListener('click', function(){
