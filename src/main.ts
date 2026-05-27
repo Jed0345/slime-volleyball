@@ -1952,13 +1952,14 @@
     var ask = document.getElementById('rematch-ask');
     var yes = document.getElementById('rematch-yes');
     var no  = document.getElementById('rematch-no');
+    var hint = document.getElementById('rematch-hint');
     if(mode === 'idle'){ panel.style.display = 'none'; return; }
     panel.style.display = 'flex';
     ask.style.display = yes.style.display = no.style.display = 'none';
-    if(mode === 'offer'){       msg.textContent = 'PLAY AGAIN?';                 ask.style.display = ''; }
-    else if(mode === 'waiting'){ msg.textContent = 'WAITING FOR OPPONENT...'; }
-    else if(mode === 'asked'){   msg.textContent = 'OPPONENT WANTS A REMATCH';   yes.style.display = ''; no.style.display = ''; }
-    else if(mode === 'declined'){msg.textContent = 'OPPONENT DECLINED';          ask.style.display = ''; }
+    if(mode === 'offer'){       msg.textContent = 'PLAY AGAIN?';                 ask.style.display = ''; hint.textContent = 'Press R for rematch'; }
+    else if(mode === 'waiting'){ msg.textContent = 'WAITING FOR OPPONENT...';                            hint.textContent = ''; }
+    else if(mode === 'asked'){   msg.textContent = 'OPPONENT WANTS A REMATCH';   yes.style.display = ''; no.style.display = ''; hint.textContent = 'Press R to accept'; }
+    else if(mode === 'declined'){msg.textContent = 'OPPONENT DECLINED';          ask.style.display = ''; hint.textContent = 'Press R for rematch'; }
   }
   function hideRematch(){ setRematchUI('idle'); }
   function onEnterGameOver(){ if(netMode && rematchState === 'idle') setRematchUI('offer'); }
@@ -2090,6 +2091,9 @@
     if(e.key===' '){ tryServe(); }
     if(e.key==='Enter'){ e.preventDefault(); togglePause(); } // pause/resume offline play
     if(e.key==='c' || e.key==='C'){ DEBUG_COUNTER_ZONES = !DEBUG_COUNTER_ZONES; } // toggle counter-zone debug overlay
+    // R = request a rematch (online game over), or accept one the opponent offered.
+    // requestRematch() internally accepts when we're in the 'asked' state.
+    if((e.key==='r' || e.key==='R') && netMode && rematchState !== 'idle'){ requestRematch(); }
   });
   window.addEventListener('keyup', function(e){
     if(isTypingTarget(e.target)) return;
