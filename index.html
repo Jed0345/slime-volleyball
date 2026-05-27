@@ -147,6 +147,95 @@
     background:#e8537f; transform:rotate(-45deg); border-radius:2px;
   }
 
+  /* In-game menu. Gear (bottom-left) pops out a horizontal category bar; picking
+     a category opens a small panel above it. Chat has its own button (bottom-
+     centre) and the music icon mirrors the gear on the bottom-right. */
+  #menu-btn, #chat-btn, #court > #musicbtn{
+    position:absolute; bottom:12px; z-index:6;
+    display:flex; align-items:center; justify-content:center;
+    color:#e8ecf4; background:rgba(27,32,48,0.7); border:2px solid rgba(255,255,255,0.25);
+    border-radius:50%; width:38px; height:38px; padding:0; cursor:pointer;
+    font-family:'PixelBold', monospace;
+  }
+  #menu-btn{ left:12px; }
+  #court > #musicbtn{ right:12px; left:auto; }   /* mirrors the gear on the right */
+  #menu-btn svg, #chat-btn svg, #court > #musicbtn svg{ display:block; width:20px; height:20px; }
+  #menu-btn:hover, #chat-btn:hover, #court > #musicbtn:hover{ background:rgba(47,127,214,0.55); }
+  /* Chat: a wider pill, centred along the bottom. */
+  #chat-btn{ right:58px; left:auto; }   /* round icon, just left of the music icon */
+  /* Category bar: pops out to the right of the gear. */
+  #menu-bar{ position:absolute; left:58px; bottom:12px; z-index:6; height:38px; display:none; align-items:center; gap:6px; }
+  #menu-bar.open{ display:flex; }
+  .menu-cat{
+    font-family:'PixelBold', monospace; font-size:10px; letter-spacing:1px; color:#fff;
+    background:rgba(27,32,48,0.85); border:2px solid #cfd6e4; border-radius:8px;
+    padding:8px 11px; cursor:pointer; white-space:nowrap;
+  }
+  .menu-cat:hover{ background:rgba(47,127,214,0.55); }
+  .menu-cat.active{ background:#2f7fd6; border-color:#bfe0ff; }
+  /* Secondary window: opens above the gear/bar, one category pane at a time. */
+  #menu-panel{
+    position:absolute; left:12px; bottom:58px; z-index:7;
+    width:min(380px, calc(100% - 24px)); max-height:calc(100% - 80px); overflow-y:auto;
+    display:none; background:rgba(20,24,36,0.96); border:2px solid rgba(255,255,255,0.18);
+    border-radius:12px; padding:12px; box-shadow:0 8px 28px rgba(0,0,0,0.5);
+    font-family:'PixelBold', monospace; font-size:10px;
+  }
+  #menu-panel.open{ display:block; }
+  .menu-pane{ display:none; flex-direction:column; gap:8px; }
+  .menu-pane.active{ display:flex; }
+  /* Neutralize the moved controls' full-width-row styling; stack them in the pane. */
+  #menu-panel #lobby, #menu-panel #skin-grid{ width:100%; max-width:none; margin:0; padding:0; border:0; background:none; }
+  .menu-pane button{ width:100%; }
+  /* Skin controls keep their own sizing inside the pane (the full-width rule
+     above stretched them): swatches stay 20px circles, boss buttons hug text. */
+  .menu-pane #skin-grid .swatch{ width:20px; height:20px; flex:0 0 auto; padding:0; }
+  .menu-pane #skin-grid .skin-boss{ width:auto; }
+  /* Lobby: two rows ([First to + select + Create] / [OR + code + Join]); its
+     buttons hug their content rather than stretching to the pane width. */
+  .lobby-row{ display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .menu-pane #lobby button{ flex:1 1 auto; width:auto; max-width:210px; }
+  #menu-panel button:not(.swatch){ padding-top:12px; padding-bottom:12px; } /* secondary-pane button vertical padding (swatches stay round) */
+  /* Rules button shows its ruleset colour only on hover / press: blue (Classic)
+     / yellow (Power); default look at rest. */
+  #menu-panel #gamemodebtn.rules-classic:hover, #menu-panel #gamemodebtn.rules-classic:active{ background:rgba(47,127,214,0.3); border-color:#2f7fd6; color:#bfe0ff; }
+  #menu-panel #gamemodebtn.rules-power:hover, #menu-panel #gamemodebtn.rules-power:active{ background:rgba(255,243,107,0.22); border-color:#fff36b; color:#fff36b; }
+  #menu-panel #controlhint, #menu-panel #powerhint{ font-size:10px; line-height:18px; } /* +~4px line spacing for the wrapping hint texts */
+  /* Normalize the whole menu + secondary panel to one face/size/weight, matching
+     the 10px pixel category bar (overrides the buttons' default system-ui 13px). */
+  #menu-panel button, #menu-panel input, #menu-panel select, #menu-panel label{
+    font-family:'PixelBold', monospace; font-size:10px; font-weight:400;
+  }
+  .menu-cat, #menu-panel button{ text-transform:capitalize; }
+  /* Force one font across the whole menu + secondary panel: PixelBold 10px.
+     Covers stragglers (skin labels, lobby status, etc.) that set their own size,
+     including inline font-size, hence !important. */
+  #menu-bar, #menu-bar *, #menu-panel, #menu-panel *{
+    font-family:'PixelBold', monospace !important; font-size:10px !important; font-weight:400 !important;
+  }
+  /* A field row: a label on the left, the control filling the rest of the width. */
+  .menu-field{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .menu-field > .menu-field-label{ flex:0 0 auto; color:var(--text-secondary); font-family:'PixelBold', monospace; font-size:10px; }
+  #menu-panel .menu-field button{ flex:1 1 auto; width:auto; }
+  #menu-panel #theme-filter-row{ flex-direction:column; gap:8px; }
+  #cat-mode button{ max-width:250px; }              /* cap every Mode-menu button */
+  #cat-mode > button{ align-self:flex-end; }        /* right-align the non-field ones (Win/Restart) to match */
+  #court > #volctl{ bottom:58px; }   /* volume panel rises above the music icon */
+  #chat.flash{ outline:2px solid #2f7fd6; outline-offset:2px; }
+  /* Dim the on-screen icons to 40% during active play so they don't distract;
+     hover (or an open menu) brings them back so they stay usable. */
+  #court > #menu-btn, #court > #menu-bar, #court > #chat-btn, #court > #musicbtn{ transition:opacity .25s ease; }
+  #court.playing #menu-btn,
+  #court.playing #menu-bar,
+  #court.playing #chat-btn,
+  #court.playing #musicbtn{ opacity:0.4; }
+  #court.playing #menu-btn:hover,
+  #court.playing #chat-btn:hover,
+  #court.playing #musicbtn:hover,
+  #court.playing #menu-bar:hover,
+  #court.playing #menu-btn[aria-expanded="true"],
+  #court.playing #menu-bar.open{ opacity:1; }
+
   /* Latency indicator, top-left of the court (online only). */
   #pingbox{
     position:absolute; top:44px; left:16px; z-index:2; pointer-events:none;
@@ -272,6 +361,8 @@
     width:100%; max-width:750px; flex-wrap:wrap;
   }
   #controlhint{ font-size:13px; color:var(--text-secondary); }
+  #hint-row{ display:flex; flex-direction:row; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px 16px; width:100%; max-width:750px; margin:2px auto 0; }
+  #controlhint-ui, #powerhint-ui{ font-size:13px; color:var(--text-secondary); text-align:center; }
   #powerhint{ font-size:13px; color:var(--text-secondary); }
   #btns{ display:flex; gap:8px; flex-wrap:wrap; }
   button{
@@ -664,19 +755,44 @@
       <label class="vol-row"><span>Music</span><input id="vol-music" type="range" min="0" max="100" step="5" aria-label="Music volume"></label>
       <label class="vol-row"><span>SFX</span><input id="vol-sfx" type="range" min="0" max="100" step="5" aria-label="Sound effects volume"></label>
     </div>
+    <!-- In-game options menu: a gear pinned to the court's bottom-left opens a
+         pop-up holding all the game options (moved in by JS so the whole game is
+         self-contained on screen, ready for the Google Play build). Chat stays in
+         the side panel; the Chat item links to it. -->
+    <button id="menu-btn" type="button" aria-label="Game menu" title="Menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.32.61.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.56 1.62-.94l2.39.96c.18.1.47.02.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/></svg>
+    </button>
+    <div id="menu-bar" aria-hidden="true">
+      <button class="menu-cat" type="button" data-cat="online">Online</button>
+      <button class="menu-cat" type="button" data-cat="mode">Mode</button>
+      <button class="menu-cat" type="button" data-cat="skins">Skins</button>
+      <button class="menu-cat" type="button" data-cat="stage">Stage</button>
+    </div>
+    <div id="menu-panel" aria-hidden="true">
+      <div class="menu-pane" id="cat-online"></div>
+      <div class="menu-pane" id="cat-mode"></div>
+      <div class="menu-pane" id="cat-skins"></div>
+      <div class="menu-pane" id="cat-stage"></div>
+    </div>
+    <button id="chat-btn" type="button" aria-label="Open chat" title="Chat"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 4H7v-2h6v2zm4-6H7V5h10v2z"/></svg></button>
     </div><!-- /#court -->
   </div>
 
+  <div id="hint-row">
+    <div id="controlhint-ui" class="controlhint"></div>
+    <div id="powerhint-ui" class="powerhint" style="display:none;"></div>
+  </div>
+
   <div id="controls">
-    <div id="controlhint"></div>
-    <div id="powerhint" style="display:none;"></div>
+    <div id="controlhint" class="controlhint"></div>
+    <div id="powerhint" class="powerhint" style="display:none;"></div>
     <div id="btns">
       <button id="onlinebtn">Online</button>
       <button id="winmodebtn" style="display:none;">Mode: First to 6</button>
       <button id="modebtn">Mode: 1 Player</button>
       <button id="oppbtn">Opponent: White Slime</button>
       <button id="gamemodebtn">Rules: Classic Slime</button>
-      <button id="resetbtn">Reset</button>
+      <button id="resetbtn">Restart</button>
       <button id="leavebtn" style="display:none;">Leave Room</button>
       <button id="musicbtn" type="button" class="music-off" aria-label="Toggle music" title="Music">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -733,26 +849,38 @@
     </div>
   </div>
 
-  <div id="lobby" style="display:none; width:100%; max-width:750px; margin:12px auto 0; padding:14px; border:0.5px solid var(--border); border-radius:12px; background:rgba(0,0,0,0.15);">
-    <div id="lobbyhome" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-      <button id="createbtn">Create game</button>
-      <label style="color:var(--text-secondary); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
-        First to
-        <select id="winselect">
-          <option value="3">3</option>
-          <option value="5">5</option>
-          <option value="6" selected>6</option>
-          <option value="7">7</option>
-          <option value="10">10</option>
-          <option value="15">15</option>
-        </select>
-      </label>
-      <span style="color:var(--text-secondary); font-size:13px;">or</span>
-      <input id="codeinput" maxlength="4" placeholder="CODE" style="text-transform:uppercase; width:90px; text-align:center; letter-spacing:3px;" />
-      <button id="joinbtn">Join</button>
+  <div id="lobby" style="display:none; width:100%; max-width:750px; margin:0 auto; border-radius:12px; background:rgba(0,0,0,0.15);">
+    <div id="lobbyhome" style="display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+      <div class="lobby-row">
+        <label style="color:var(--text-secondary); display:inline-flex; align-items:center; gap:6px;">
+          First to
+          <select id="winselect">
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6" selected>6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+          </select>
+        </label>
+        <button id="createbtn">Create game</button>
+      </div>
+      <div class="lobby-row">
+        <span style="color:var(--text-secondary);">OR</span>
+        <input id="codeinput" maxlength="4" placeholder="CODE" style="text-transform:uppercase; width:90px; text-align:center; letter-spacing:3px;" />
+        <button id="joinbtn">Join</button>
+      </div>
       <button id="lobbyclose" style="margin-left:auto;">Close</button>
     </div>
-    <div id="lobbystatus" style="margin-top:10px; font-size:13px; color:var(--text-secondary); min-height:18px;"></div>
+    <div id="lobbystatus" style="margin-top:10px; font-size:13px; color:var(--text-secondary); min-height:18px; display:none;"></div>
   </div>
   </div><!-- /#app-main -->
 
@@ -808,7 +936,7 @@
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
   <footer id="version">
-    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.19.2</span>
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.20.0</span>
     <span id="footer-social">
       <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
       <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>

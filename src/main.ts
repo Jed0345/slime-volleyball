@@ -333,14 +333,26 @@
   // (which is pointless outside Power Slime, so hide it in Classic).
   function updateGameModeUI(){
     var b = document.getElementById('gamemodebtn');
-    if(b) b.textContent = 'Rules: ' + gameModeLabel(gameMode);
+    if(b){
+      b.textContent = gameModeLabel(gameMode);
+      b.classList.toggle('rules-power', gameMode === 'power');   // yellow
+      b.classList.toggle('rules-classic', gameMode !== 'power'); // blue
+    }
     var sp = document.getElementById('joystick-spike');
     if(sp) sp.style.display = (gameMode === 'power') ? '' : 'none';
     // Power Slime spike/counter hint, shown only when those moves are active.
-    var ph = document.getElementById('powerhint');
-    if(ph){
-      ph.innerHTML = 'Power Slime: <b style="color:#fff36b">S</b> to spike, or block / counter / dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
-      ph.style.display = (gameMode === 'power') ? '' : 'none';
+    // The below-game line keeps the "Power Slime:" prefix for context; the menu
+    // copy (already inside the Rules pane) drops it.
+    // In the Mode menu, the power-slime controls replace the basic control hint
+    // when Power rules are on (the below-game copy still shows both).
+    var _mch = document.getElementById('controlhint');
+    if(_mch) _mch.style.display = (gameMode === 'power') ? 'none' : '';
+    var _phFull = 'Power Slime: <b style="color:#fff36b">S</b> to spike, or block / counter / dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
+    var _phShort = '<b style="color:#fff36b">S</b> to spike, or block / counter / dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
+    var phs = document.querySelectorAll('.powerhint');
+    for(var _pi=0; _pi<phs.length; _pi++){
+      phs[_pi].innerHTML = (phs[_pi].id === 'powerhint') ? _phShort : _phFull;
+      phs[_pi].style.display = (gameMode === 'power') ? '' : 'none';
     }
   }
   function updateWinModeBtn(){
@@ -378,6 +390,15 @@
     document.getElementById('p2score').textContent = pad(scores.p2);
     updateDots();
   }
+  // Update every copy of the controls hint (the line below the game + the copy in
+  // the Mode menu) so both always read the same.
+  function setControlHint(html){
+    var els = document.querySelectorAll('.controlhint');
+    for(var i=0;i<els.length;i++) els[i].innerHTML = html;
+  }
+  // A wrapped control's surrounding .menu-field (label + control), or the control
+  // itself before the menu wraps it — so hiding a control hides its label too.
+  function fieldOf(el){ return (el && el.closest && el.closest('.menu-field')) || el; }
   function updateLabels(){
     // The local player's slime shows their chat username once they've set one.
     document.getElementById('p1name').textContent = softHyphens(chatNameCustom ? chatUsername.toUpperCase() : 'BLUE SLIME');
@@ -392,17 +413,15 @@
     if(p2prof) p2prof.style.display = local2P ? '' : 'none';
     var p1ProfLbl = document.getElementById('chat-profile-label');
     if(p1ProfLbl) p1ProfLbl.textContent = local2P ? 'Blue Slime:' : 'Username:';
-    document.getElementById('oppbtn').style.display = twoPlayer ? 'none' : '';
-    document.getElementById('oppbtn').textContent = 'Opponent: ' + curOpp().name;
-    document.getElementById('modebtn').textContent = 'Mode: ' + (twoPlayer ? '2 Player' : '1 Player');
-    var hint = document.getElementById('controlhint');
+    fieldOf(document.getElementById('oppbtn')).style.display = twoPlayer ? 'none' : '';
+    fieldOf(document.getElementById('resetbtn')).style.display = twoPlayer ? 'none' : ''; // Restart is a single-player action
+    document.getElementById('oppbtn').textContent = curOpp().name;
+    document.getElementById('modebtn').textContent = (twoPlayer ? 'Two Player' : 'Single Player');
     // Extra single-player hotkeys shown next to the movement keys.
     var extra = ' &nbsp;&middot;&nbsp; Pause: <b>Enter</b>';
-    if(twoPlayer){
-      hint.innerHTML = 'Blue: <b>A / W / D</b> &nbsp;&middot;&nbsp; Pink: <b>J / I / L</b> or <b>&larr; &uarr; &rarr;</b>' + extra;
-    } else {
-      hint.innerHTML = 'Move/jump: <b>A / W / D</b> or <b>&larr; &uarr; &rarr;</b>' + extra;
-    }
+    setControlHint(twoPlayer
+      ? 'Blue: <b>A / W / D</b> &nbsp;&middot;&nbsp; Pink: <b>J / I / L</b> or <b>&larr; &uarr; &rarr;</b>' + extra
+      : 'Move/jump: <b>A / W / D</b> or <b>&larr; &uarr; &rarr;</b>' + extra);
   }
 
   var keys = {};
@@ -937,11 +956,11 @@
     ctx.beginPath(); ctx.arc(ex+Math.cos(ang)*er*0.45, ey+Math.sin(ang)*er*0.45, pr, 0, Math.PI*2); ctx.fill();
     // The White Slime wears shades (shades.svg): scaled to the slime, centred
     // over the eye and mirrored to face the way it's looking. Drawn once loaded.
-    if(s.col === '#f3f3f3' && shadesReady && theme === 'beach'){
+    if(false && s.col === '#f3f3f3' && shadesReady && theme === 'beach'){ // shades disabled for now
       var dir = faceRight ? 1 : -1;
       var sw = s.r * 1.15;             // shades width relative to the dome radius
       var sh = sw * 0.380;             // shades.svg aspect (viewBox 28.45 x 10.81)
-      var scx = s.x + dir * s.r * 0.28 + 4;  // nudged 4px screen-right
+      var scx = s.x + dir * s.r * 0.28;  // horizontal placement (4px right nudge removed)
       var scy = s.y - s.r * 0.48;
       ctx.save();
       ctx.translate(scx, scy);
@@ -1313,7 +1332,7 @@
 
   var ws = null;
 
-  function lobbyStatus(t){ document.getElementById('lobbystatus').textContent = t; }
+  function lobbyStatus(t){ var el = document.getElementById('lobbystatus'); if(!el) return; el.textContent = t; el.style.display = t ? '' : 'none'; } // hidden until there's a message (e.g. after Create game)
 
   function netConnect(onOpen){
     try{
@@ -1476,6 +1495,7 @@
     var code = randCode();
     var sel = document.getElementById('winselect');
     hostWin = sel ? parseInt(sel.value, 10) || DEFAULT_WIN : DEFAULT_WIN;
+    lobbyStatus('Share this code: ' + code + ' — waiting for a friend to join...'); // show the code right away
     netConnect(function(){ netSend({type:'create', code:code}); });
   }
   function netJoin(code){
@@ -1703,18 +1723,17 @@
     resetPositions(server);
     updateScore();
     document.getElementById('p2name').textContent = 'PINK';
-    document.getElementById('oppbtn').style.display = 'none';
-    document.getElementById('modebtn').style.display = 'none';
-    document.getElementById('gamemodebtn').style.display = asHost ? '' : 'none'; // host can change the ruleset mid-match; guest follows
-    document.getElementById('resetbtn').style.display = 'none';
+    fieldOf(document.getElementById('oppbtn')).style.display = 'none';
+    fieldOf(document.getElementById('modebtn')).style.display = 'none';
+    fieldOf(document.getElementById('gamemodebtn')).style.display = asHost ? '' : 'none'; // host can change the ruleset mid-match; guest follows
+    fieldOf(document.getElementById('resetbtn')).style.display = 'none';
     document.getElementById('leavebtn').style.display = '';
     // Only the host can pick the points-to-win; the guest follows via 'config'.
     document.getElementById('winmodebtn').style.display = asHost ? '' : 'none';
     updateWinModeBtn();
     netPaused = false;
-    document.getElementById('controlhint').innerHTML =
-      asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
-             : 'You are <b>PINK</b> &middot; Move/jump: <b>A / W / D</b> or arrows';
+    setControlHint(asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
+                          : 'You are <b>PINK</b> &middot; Move/jump: <b>A / W / D</b> or arrows');
     // Mirror the court + scoreboard for the guest so each player sees their own
     // slime on the left (the host already is on the left).
     document.getElementById('stage').classList.toggle('mirror', !asHost);
@@ -1966,7 +1985,7 @@
   // refresh rate) but advance the simulation in fixed 1/60s steps, catching up
   // with however much real time elapsed since the last frame.
   var STEP_MS = 1000 / 60;
-  var _lastT = 0, _accum = 0;
+  var _lastT = 0, _accum = 0, _wasPlaying = null, _courtEl = null;
   function loop(now){
     if(!_lastT) _lastT = now;
     var elapsed = now - _lastT;
@@ -1983,6 +2002,14 @@
     }
     if(n >= 5) _accum = 0; // couldn't keep up; drop the backlog
     if(netMode) presentNet(); // mirror the simulated state to the DOM once per frame
+    // Dim the on-screen menu/chat/music icons during active play — but NOT while
+    // paused, so the menu is fully visible/usable when the game is paused.
+    var _dim = (state === 'play' && !userPaused);
+    if(_wasPlaying !== _dim){
+      _wasPlaying = _dim;
+      if(!_courtEl) _courtEl = document.getElementById('court');
+      if(_courtEl) _courtEl.classList.toggle('playing', _dim);
+    }
     draw();
     requestAnimationFrame(loop);
   }
@@ -2295,7 +2322,7 @@
   })();
   var themeBtn = document.getElementById('themebtn');
   var THEMES = ['grassy', 'city', 'beach'];
-  function applyTheme(){ themeBtn.textContent = 'Stage: ' + theme.charAt(0).toUpperCase() + theme.slice(1); }
+  function applyTheme(){ themeBtn.textContent = theme.charAt(0).toUpperCase() + theme.slice(1); }
   applyTheme();
   // Cycle the stage. The beach scene uses the God Rays filter: choosing beach
   // switches the active filter to God Rays; leaving beach (if God Rays were on)
@@ -2360,6 +2387,9 @@
     var ci = document.getElementById('codeinput'), jb = document.getElementById('joinbtn');
     if(ci) ci.disabled = creating;
     if(jb) jb.disabled = creating;
+    // Hosting: hide the whole Join row (OR / code / Join) so only the share code shows.
+    var jr = (jb && jb.closest) ? jb.closest('.lobby-row') : null;
+    if(jr) jr.style.display = creating ? 'none' : '';
   }
   document.getElementById('onlinebtn').addEventListener('click', function(){
     var lob = document.getElementById('lobby');
@@ -2373,6 +2403,7 @@
   });
   document.getElementById('createbtn').addEventListener('click', function(){
     setLobbyCreating(true); // hosting this room — can't also join another
+    setMsg('WAITING', 'FOR AN OPPONENT TO JOIN'); // main-screen status while hosting
     lobbyStatus('Connecting...'); netCreate();
   });
   document.getElementById('joinbtn').addEventListener('click', function(){
@@ -2658,7 +2689,7 @@
 
   function applyFilter(){
     var f = FILTERS[filterIdx];
-    filterBtn.textContent = 'Filter: ' + f.label;
+    filterBtn.textContent = f.label;
     if(f.key === 'off'){
       stageEl.setAttribute('data-filter', 'off');
       return;
@@ -3007,6 +3038,113 @@
     }
   }
   // =================== END SKIN PICKER ===================
+
+  // ===================== IN-GAME MENU =====================
+  // A gear pinned to the court's bottom-left opens a pop-up holding all the game
+  // options. The existing control groups are physically MOVED into it (their
+  // event listeners ride along with the nodes), so the whole game is
+  // self-contained on the game screen for the Google Play build. Chat stays in
+  // the side panel; the menu's Chat item links to it.
+  (function(){
+    var btn   = document.getElementById('menu-btn');
+    var bar   = document.getElementById('menu-bar');
+    var panel = document.getElementById('menu-panel');
+    var court = document.getElementById('court');
+    if(!btn || !bar || !panel) return;
+    // Distribute the controls into per-category panes (listeners ride along with
+    // the moved nodes — they bind by id regardless of DOM position).
+    function moveInto(catId, ids){
+      var cat = document.getElementById(catId); if(!cat) return;
+      ids.forEach(function(id){ var el = document.getElementById(id); if(el) cat.appendChild(el); });
+    }
+    moveInto('cat-online', ['onlinebtn','lobby','leavebtn']);
+    moveInto('cat-mode',   ['modebtn','oppbtn','gamemodebtn','winmodebtn','resetbtn','controlhint','powerhint']);
+    moveInto('cat-skins',  ['skin-grid']);
+    // Each of these reads as a label to the LEFT of its button (the button shows
+    // just the value). Hiding a control hides its whole field (see fieldOf).
+    (function(){
+      function labelField(id, text){
+        var b = document.getElementById(id);
+        if(!b || !b.parentNode || b.closest('.menu-field')) return;
+        var field = document.createElement('div'); field.className = 'menu-field';
+        var lab = document.createElement('span'); lab.className = 'menu-field-label'; lab.textContent = text;
+        b.parentNode.insertBefore(field, b);
+        field.appendChild(lab); field.appendChild(b);
+      }
+      labelField('modebtn', 'Mode');
+      labelField('oppbtn', 'Opponent');
+      labelField('gamemodebtn', 'Rules');
+      labelField('themebtn', 'Stage');
+      labelField('filterbtn', 'Filter');
+      labelField('resetbtn', 'Game');
+    })();
+    // Stage + Filter get their own category, moved out of the Skins pane.
+    (function(){
+      var cs = document.getElementById('cat-stage');
+      var tfr = document.getElementById('theme-filter-row');
+      if(cs && tfr) cs.appendChild(tfr);
+    })();
+    // Music icon moves out to the court's bottom-right (mirror of the gear); the
+    // now-empty control wrappers are hidden.
+    var music = document.getElementById('musicbtn');
+    if(music && court) court.appendChild(music);
+    ['controls','skinpickers'].forEach(function(id){ var el = document.getElementById(id); if(el) el.style.display = 'none'; });
+    // The Online category opens the lobby directly, so the in-pane "Online" toggle
+    // and the lobby's own Close button are redundant inside the menu.
+    var _ob = document.getElementById('onlinebtn'); if(_ob) _ob.style.display = 'none';
+    var _lc = document.getElementById('lobbyclose'); if(_lc) _lc.style.display = 'none';
+
+    var activeCat = null;
+    function setCat(cat){
+      activeCat = cat;
+      var panes = panel.querySelectorAll('.menu-pane');
+      for(var i=0;i<panes.length;i++) panes[i].classList.toggle('active', panes[i].id === ('cat-' + cat));
+      var cats = bar.querySelectorAll('.menu-cat');
+      for(var j=0;j<cats.length;j++) cats[j].classList.toggle('active', cats[j].getAttribute('data-cat') === cat);
+      panel.classList.toggle('open', !!cat);
+      panel.setAttribute('aria-hidden', cat ? 'false' : 'true');
+      // Opening Online jumps straight to the lobby (create/join), skipping the
+      // redundant "Online" button — unless a match is already running.
+      if(cat === 'online'){
+        var lob = document.getElementById('lobby');
+        if(lob && !netMode){ lob.style.display = 'block'; if(typeof setLobbyCreating === 'function') setLobbyCreating(false); if(typeof lobbyStatus === 'function') lobbyStatus(''); }
+      }
+    }
+    function closeAll(){
+      bar.classList.remove('open'); bar.setAttribute('aria-hidden','true');
+      btn.setAttribute('aria-expanded','false'); setCat(null);
+    }
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(bar.classList.contains('open')){ closeAll(); }
+      else { bar.classList.add('open'); bar.setAttribute('aria-hidden','false'); btn.setAttribute('aria-expanded','true'); }
+    });
+    bar.addEventListener('click', function(e){
+      var b = e.target.closest ? e.target.closest('.menu-cat') : null;
+      if(!b) return;
+      var cat = b.getAttribute('data-cat');
+      setCat(activeCat === cat ? null : cat); // click the active category again to close its panel
+    });
+    // Outside click / Escape closes the whole menu.
+    document.addEventListener('click', function(e){
+      if(!bar.classList.contains('open')) return;
+      if(bar.contains(e.target) || panel.contains(e.target) || btn.contains(e.target)) return;
+      closeAll();
+    });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeAll(); });
+    // Chat button (bottom-centre) reveals + focuses the side-panel chat.
+    var chatBtn = document.getElementById('chat-btn');
+    if(chatBtn) chatBtn.addEventListener('click', function(){
+      var chat = document.getElementById('chat');
+      var input = document.getElementById('chat-input');
+      if(chat){
+        try{ chat.scrollIntoView({behavior:'smooth', block:'nearest'}); }catch(e){}
+        chat.classList.add('flash'); setTimeout(function(){ chat.classList.remove('flash'); }, 900);
+      }
+      if(input && !input.disabled){ input.focus(); }
+    });
+  })();
+  // =================== END IN-GAME MENU ===================
 
   buildSwatches();
   buildDots();
