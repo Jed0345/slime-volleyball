@@ -1436,6 +1436,14 @@
     var probe = function(){
       if(ws && ws.readyState === WebSocket.OPEN){ netSend({type:'ping', t: nowMs()}); }
       rtcStatsTick(); // refresh the transport (P2P/TURN/relay) + peer RTT readout
+      // Gently retune the adaptive input delay toward the latency we just measured.
+      // Step by at most ±1/sec so applyF never jumps far (a bigger move would leave
+      // a few local frames unfilled or try to commit input into the past).
+      if(rb && !rb.stalled){
+        var target = computeInputDelay();
+        if(target > rb.inputDelay) rb.inputDelay++;
+        else if(target < rb.inputDelay) rb.inputDelay--;
+      }
     };
     probe();
     pingTimer = setInterval(probe, 1000);
@@ -1486,14 +1494,48 @@
   // real one arrives and differs, we ROLL BACK to that frame and re-simulate to
   // the present. The state is tiny (two slimes + a ball), so replaying a handful
   // of frames each packet is essentially free.
-  var INPUT_DELAY = 2;    // apply local input this many frames late so it usually
-                          // reaches the peer before they need it (fewer rollbacks)
+  // Input delay is ADAPTIVE: we apply local input a few frames late so it usually
+  // reaches the peer before they need it (fewer rollbacks). On a LAN that's 2
+  // frames; on a high-ping transatlantic link we raise it so the delay covers
+  // most of the one-way trip and rollback only mops up the rest. The live value
+  // lives on rb.inputDelay (per-peer; the sim tags each input with its frame, so
+  // the two sides may run different delays and still stay in lockstep).
+  var INPUT_DELAY_MIN = 2;
+  var INPUT_DELAY_MAX = 5; // ~83ms — past this it'd feel sluggish, so rollback covers the rest
   var MAX_ROLLBACK = 10;  // never predict more than this many frames past the last
                           // confirmed remote input — stall instead, to bound replay
   var INPUT_REDUNDANCY = 8; // resend this many recent frames in every packet, so a
                             // dropped packet on the unreliable channel is backfilled
                             // by the next one (rollback can't fix an input that never
                             // arrives). Inputs are 1 byte each, so this stays tiny.
+  var CHECK_INTERVAL = 60;  // checksum + exchange one confirmed frame this often (~1s)
+
+  // Pick an input delay that covers roughly the one-way latency to the peer, so
+  // most inputs land before they're needed (fewer rollbacks). Uses the measured
+  // P2P round-trip when we have it, else the relay round-trip, else the minimum.
+  function computeInputDelay(){
+    var rtt = rtcRtt || myPing || 0; // ms, round-trip
+    if(!rtt) return INPUT_DELAY_MIN;
+    var d = Math.round((rtt / 2) / STEP_MS); // one-way trip, in frames
+    if(d < INPUT_DELAY_MIN) d = INPUT_DELAY_MIN;
+    if(d > INPUT_DELAY_MAX) d = INPUT_DELAY_MAX;
+    return d;
+  }
+
+  // Coarse, deterministic hash of the simulation state for desync detection.
+  // Positions/velocities are rounded so a last-bit float difference between
+  // browsers doesn't trip a false alarm — a REAL desync diverges by whole pixels
+  // within a few frames, so even this coarse hash catches it quickly. (FNV-1a.)
+  function rbChecksum(s){
+    var h = 0x811c9dc5;
+    function mix(n){ h ^= (n|0); h = (h * 0x01000193) >>> 0; }
+    function q(v, scale){ return Math.round(v*scale)|0; }
+    mix(q(s.p1.x,1)); mix(q(s.p1.y,1)); mix(q(s.p1.vx,8)); mix(q(s.p1.vy,8));
+    mix(q(s.p2.x,1)); mix(q(s.p2.y,1)); mix(q(s.p2.vx,8)); mix(q(s.p2.vy,8));
+    mix(q(s.ball.x,1)); mix(q(s.ball.y,1)); mix(q(s.ball.vx,8)); mix(q(s.ball.vy,8));
+    mix(s.a|0); mix(s.b|0); mix(s.sv==='p1'?1:2); mix(s.st==='play'?1:0);
+    return h >>> 0;
+  }
 
   var NOINPUT = {left:false, right:false, jump:false, spike:false};
   function sampleLocalInput(){
@@ -1553,7 +1595,17 @@
       saved: {},                // frame -> pre-frame state snapshot
       lastRemoteFrame: -1,      // highest confirmed remote frame
       lastRemoteInput: NOINPUT, // newest confirmed remote input (prediction base)
-      stalled: false
+      stalled: false,
+      inputDelay: computeInputDelay(), // adaptive; retuned each second (see rtcStatsTick)
+      // --- clock sync (frame-advantage time-skip) ---
+      localAdv: 0,              // how many frames WE'VE simulated past the peer's last confirmed input
+      remoteAdv: 0,             // the same number the PEER reports about itself
+      ticks: 0,                 // rbTick calls (advances even on a skipped frame)
+      lastSkipTick: -99,        // last tick we voluntarily held a frame
+      // --- desync detection (state checksum exchange) ---
+      myHash: {}, peerHash: {}, // frame -> checksum
+      nextCheck: CHECK_INTERVAL, // next frame number to checksum
+      desyncFrame: -1
     };
     simReplaying = false;
   }
@@ -1576,26 +1628,61 @@
   // stall if we'd otherwise predict too far ahead of the peer).
   function rbTick(){
     if(!rb || netPaused) return;
-    var applyF = rb.frame + INPUT_DELAY;
+    rb.ticks++;
+    var applyF = rb.frame + rb.inputDelay;
     if(rb.local[applyF] === undefined){ rb.local[applyF] = sampleLocalInput(); } // lock this frame's input once
+    // How far ahead we are of the newest input we've actually confirmed from the
+    // peer. We tell them this number; they tell us theirs (see rbOnRemoteInput).
+    rb.localAdv = rb.frame - rb.lastRemoteFrame;
     // Send the newest frame plus a redundant window of recent ones, packed one
     // byte per frame (bit0 left, bit1 right, bit2 jump, bit3 spike). Sent every tick so the
     // unreliable channel self-heals dropped packets; the WS fallback dedupes by
-    // frame, so resends are harmless.
+    // frame, so resends are harmless. 'a' piggybacks our frame advantage.
     var hist = [];
     for(var hf = applyF - INPUT_REDUNDANCY + 1; hf <= applyF; hf++){
       var li = (hf >= 0 && rb.local[hf]) ? rb.local[hf] : NOINPUT;
       hist.push((li.left?1:0) | (li.right?2:0) | (li.jump?4:0) | (li.spike?8:0));
     }
-    rtcSend({type:'in', f:applyF, n:hist});
+    rtcSend({type:'in', f:applyF, n:hist, a:rb.localAdv});
+
+    // CLOCK SYNC (frame-advantage time-skip). If we've drifted ahead of the peer
+    // in real time, voluntarily hold this frame so the two sims stay glued ~1-2
+    // frames apart instead of sprinting until we slam into MAX_ROLLBACK and hard-
+    // stall. We're "ahead" when our advantage exceeds theirs; only the leading
+    // side yields. Capped at ~1 held frame in 3 so packet loss can't freeze us
+    // (in that case we still advance and the MAX_ROLLBACK stall below takes over).
+    if(rb.lastRemoteFrame >= 0 && (rb.localAdv - rb.remoteAdv) >= 2 && (rb.ticks - rb.lastSkipTick) >= 3){
+      rb.lastSkipTick = rb.ticks;
+      return; // input already sent above; just don't advance the sim this tick
+    }
+
     if(rb.frame - rb.lastRemoteFrame > MAX_ROLLBACK){ rb.stalled = true; return; }
     rb.stalled = false;
     simReplaying = true;
     rbSimOne();
     simReplaying = false;
+
+    // DESYNC DETECTION. Once a scheduled frame is fully confirmed AND safely in
+    // the past (no further rollback can touch it), checksum its saved state,
+    // exchange it, and warn if the two sims ever disagree.
+    if(rb.lastRemoteFrame >= rb.nextCheck && rb.frame > rb.nextCheck && rb.saved[rb.nextCheck]){
+      var cf = rb.nextCheck;
+      var h = rbChecksum(rb.saved[cf]);
+      rb.myHash[cf] = h;
+      rtcSend({type:'sync', f:cf, h:h});
+      var ph = rb.peerHash[cf];
+      if(ph !== undefined && ph !== h && rb.desyncFrame !== cf){
+        rb.desyncFrame = cf;
+        console.warn('[netcode] DESYNC at frame '+cf+' (local '+h+' != peer '+ph+')');
+      }
+      rb.nextCheck += CHECK_INTERVAL;
+    }
+
     if(rb.frame % 30 === 0){ // periodically drop buffers well behind any rollback point
       var cutoff = rb.frame - 60;
       for(var k in rb.saved){ if((k|0) < cutoff){ delete rb.saved[k]; delete rb.used[k]; delete rb.local[k]; delete rb.remote[k]; } }
+      var hcut = rb.frame - 180;
+      for(var hk in rb.myHash){ if((hk|0) < hcut){ delete rb.myHash[hk]; delete rb.peerHash[hk]; } }
     }
   }
   // A peer input packet arrived (a redundant window of frames). Store any frames
@@ -1604,6 +1691,7 @@
   // forward to the present. Order/duplicates don't matter — frames are keyed.
   function rbOnRemoteInput(m){
     if(!rb || !m.n) return;
+    if(typeof m.a === 'number') rb.remoteAdv = m.a; // peer's frame advantage, for clock sync
     var end = m.f|0, arr = m.n, earliest = -1;
     for(var i=0; i<arr.length; i++){
       var fr = end - (arr.length - 1) + i;
@@ -1835,6 +1923,18 @@
     // Rollback: a per-frame input from the peer. Feed it to the engine, which
     // re-simulates from that frame if it contradicts what we predicted.
     if(m.type === 'in'){ rbOnRemoteInput(m); return; }
+    // Desync check: the peer's checksum for a confirmed frame. Compare to ours.
+    if(m.type === 'sync'){
+      if(rb && typeof m.f === 'number'){
+        var sf = m.f|0; rb.peerHash[sf] = m.h>>>0;
+        var mh = rb.myHash[sf];
+        if(mh !== undefined && mh !== (m.h>>>0) && rb.desyncFrame !== sf){
+          rb.desyncFrame = sf;
+          console.warn('[netcode] DESYNC at frame '+sf+' (local '+mh+' != peer '+(m.h>>>0)+')');
+        }
+      }
+      return;
+    }
     // Reconnect handshake: adopt the authoritative score and restart the sim.
     if(m.type === 'resync'){ rbResync(m.a, m.b, m.sv); return; }
   }
