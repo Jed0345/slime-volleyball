@@ -152,6 +152,7 @@
   var userPaused = false;
   // Networking state: netMode is 'host', 'guest', or null (offline).
   var netMode = null;
+  var hosting = false; // created/connected a room: Leave (red) replaces Create in the lobby
   var netPaused = false; // true while the opponent is mid-reconnect (grace window)
   // Online uses ROLLBACK netcode: both peers run the identical deterministic
   // simulation, exchange only per-frame inputs, predict the opponent's input
@@ -1495,6 +1496,7 @@
     var code = randCode();
     var sel = document.getElementById('winselect');
     hostWin = sel ? parseInt(sel.value, 10) || DEFAULT_WIN : DEFAULT_WIN;
+    hosting = true;
     lobbyStatus('Share this code: ' + code + ' — waiting for a friend to join...'); // show the code right away
     netConnect(function(){ netSend({type:'create', code:code}); });
   }
@@ -1727,7 +1729,7 @@
     fieldOf(document.getElementById('modebtn')).style.display = 'none';
     fieldOf(document.getElementById('gamemodebtn')).style.display = asHost ? '' : 'none'; // host can change the ruleset mid-match; guest follows
     fieldOf(document.getElementById('resetbtn')).style.display = 'none';
-    document.getElementById('leavebtn').style.display = '';
+    setLobbyCreating(true); // connected: Leave (red) in place of Create, Join hidden
     // Only the host can pick the points-to-win; the guest follows via 'config'.
     document.getElementById('winmodebtn').style.display = asHost ? '' : 'none';
     updateWinModeBtn();
@@ -1738,7 +1740,6 @@
     // slime on the left (the host already is on the left).
     document.getElementById('stage').classList.toggle('mirror', !asHost);
     document.getElementById('sv-board').classList.toggle('mirror', !asHost);
-    document.getElementById('lobby').style.display = 'none';
     updateSkinPickerVisibility();
     // Host tells the guest the target score so both show matching dots, and the
     // ruleset (Classic/Power) so both run an identical deterministic sim.
@@ -2390,6 +2391,10 @@
     // Hosting: hide the whole Join row (OR / code / Join) so only the share code shows.
     var jr = (jb && jb.closest) ? jb.closest('.lobby-row') : null;
     if(jr) jr.style.display = creating ? 'none' : '';
+    // Connected/hosting: the Leave button takes the Create button's place.
+    var cb = document.getElementById('createbtn'), lb = document.getElementById('leavebtn');
+    if(cb) cb.style.display = creating ? 'none' : '';
+    if(lb) lb.style.display = creating ? '' : 'none';
   }
   document.getElementById('onlinebtn').addEventListener('click', function(){
     var lob = document.getElementById('lobby');
@@ -3093,6 +3098,9 @@
     // and the lobby's own Close button are redundant inside the menu.
     var _ob = document.getElementById('onlinebtn'); if(_ob) _ob.style.display = 'none';
     var _lc = document.getElementById('lobbyclose'); if(_lc) _lc.style.display = 'none';
+    // Put Leave in the Create row so it can replace Create when connected.
+    var _cb0 = document.getElementById('createbtn'), _lb0 = document.getElementById('leavebtn');
+    if(_cb0 && _lb0 && _cb0.parentNode) _cb0.parentNode.appendChild(_lb0);
 
     var activeCat = null;
     function setCat(cat){
@@ -3107,7 +3115,11 @@
       // redundant "Online" button — unless a match is already running.
       if(cat === 'online'){
         var lob = document.getElementById('lobby');
-        if(lob && !netMode){ lob.style.display = 'block'; if(typeof setLobbyCreating === 'function') setLobbyCreating(false); if(typeof lobbyStatus === 'function') lobbyStatus(''); }
+        if(lob){
+          lob.style.display = 'block';
+          if(hosting || netMode){ setLobbyCreating(true); }      // connected: keep Leave
+          else { setLobbyCreating(false); lobbyStatus(''); }     // fresh: Create / Join
+        }
       }
     }
     function closeAll(){
