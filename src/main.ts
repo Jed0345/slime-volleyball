@@ -1439,7 +1439,12 @@
       // Gently retune the adaptive input delay toward the latency we just measured.
       // Step by at most ±1/sec so applyF never jumps far (a bigger move would leave
       // a few local frames unfilled or try to commit input into the past).
-      if(rb && !rb.stalled){
+      // NOTE: we deliberately retune EVEN WHILE STALLED — a stall means the
+      // prediction window maxed out, which is exactly when we need MORE input delay
+      // (less prediction). Gating this on !stalled left the delay stuck low under
+      // high latency, so the opponent was predicted far ahead and snapped on every
+      // rollback ("can't see what they're doing") and the sim kept hard-stalling.
+      if(rb){
         var target = computeInputDelay();
         if(target > rb.inputDelay) rb.inputDelay++;
         else if(target < rb.inputDelay) rb.inputDelay--;
@@ -1501,7 +1506,8 @@
   // lives on rb.inputDelay (per-peer; the sim tags each input with its frame, so
   // the two sides may run different delays and still stay in lockstep).
   var INPUT_DELAY_MIN = 2;
-  var INPUT_DELAY_MAX = 5; // ~83ms — past this it'd feel sluggish, so rollback covers the rest
+  var INPUT_DELAY_MAX = 6; // ~100ms — enough to cover a transatlantic one-way trip so
+                           // prediction (and the rollback snaps it causes) stays minimal
   var MAX_ROLLBACK = 10;  // never predict more than this many frames past the last
                           // confirmed remote input — stall instead, to bound replay
   var INPUT_REDUNDANCY = 8; // resend this many recent frames in every packet, so a
