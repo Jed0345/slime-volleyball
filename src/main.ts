@@ -2301,6 +2301,7 @@
     theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; // cycle grassy -> city -> beach
     try{ localStorage.setItem('slimeTheme', theme); }catch(e){}
     applyTheme();
+    applyFilter(); // beach-only god rays turn on/off with the stage
   });
   document.getElementById('oppbtn').addEventListener('click', function(){
     oppIdx = (oppIdx+1)%OPPS.length;
@@ -2442,10 +2443,7 @@
       chain:['gameboy'] },
     { key:'3d',       label:'3D',
       chain:['chromatic'],
-      chromatic:{ offset:0.005 } },
-    { key:'godray',   label:'God Rays',
-      chain:['godray'],
-      godray:{ gain:0.6, lacunarity:2.75, angle:30, parallel:true, alpha:0.5 } }
+      chromatic:{ offset:0.005 } }
   ];
   var filterIdx = 0;
   try{
@@ -2578,7 +2576,7 @@
     return true;
   }
 
-  function buildChain(f){
+  function buildChain(f, beachRays){
     var filters = [];
     for(var i=0; i<f.chain.length; i++){
       var step = f.chain[i];
@@ -2637,15 +2635,14 @@
       } else if(step === 'chromatic'){
         pixiChromatic.uniforms.uOffset = f.chromatic.offset;
         filters.push(pixiChromatic);
-      } else if(step === 'godray'){
-        var gr = f.godray;
-        pixiGodray.gain       = gr.gain;
-        pixiGodray.lacunarity = gr.lacunarity;
-        pixiGodray.angle      = gr.angle;
-        pixiGodray.parallel   = !!gr.parallel;
-        pixiGodray.alpha      = gr.alpha;
-        filters.push(pixiGodray);
       }
+    }
+    if(beachRays){
+      // Beach stage ambiance: god rays are always on here, composited on top of
+      // whatever manual filter is selected (including Off).
+      pixiGodray.gain = 0.6; pixiGodray.lacunarity = 2.75; pixiGodray.angle = 30;
+      pixiGodray.parallel = true; pixiGodray.alpha = 0.5;
+      filters.push(pixiGodray);
     }
     pixiSprite.filters = filters;
   }
@@ -2653,7 +2650,10 @@
   function applyFilter(){
     var f = FILTERS[filterIdx];
     filterBtn.textContent = 'Filter: ' + f.label;
-    if(f.key === 'off'){
+    // God rays are a default, beach-only ambiance: auto-applied on the beach stage
+    // over whatever manual filter is selected (including Off).
+    var beachRays = (theme === 'beach');
+    if(f.key === 'off' && !beachRays){
       stageEl.setAttribute('data-filter', 'off');
       return;
     }
@@ -2661,8 +2661,8 @@
       stageEl.setAttribute('data-filter', 'off');
       return;
     }
-    stageEl.setAttribute('data-filter', f.key);
-    buildChain(f);
+    stageEl.setAttribute('data-filter', (f.key === 'off') ? 'godray' : f.key);
+    buildChain(f, beachRays);
   }
   applyFilter();
   filterBtn.addEventListener('click', function(){
