@@ -2614,7 +2614,7 @@
       pixiCrt.time += 0.5;
       pixiCrt.seed = Math.random();
       pixiOldFilm.seed = Math.random();
-      pixiGodray.time += 0.01; // drift the god rays' fractal-noise animation
+      pixiGodray.time += 0.007; // drift the god rays' fractal-noise animation (-30% speed)
     });
     pixiReady = true;
     return true;
