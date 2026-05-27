@@ -20,7 +20,7 @@
   // Environment theme: 'grassy' (the painted green court, default), 'city' (the
   // rooftop backdrop with drifting clouds), or 'beach' (a sunny beach court).
   var theme = 'grassy';
-  try{ var _st = localStorage.getItem('slimeTheme'); if(_st === 'city' || _st === 'grassy' || _st === 'beach') theme = _st; }catch(e){}
+  try{ var _st = localStorage.getItem('slimeTheme'); if(_st === 'city' || _st === 'grassy' || _st === 'beach' || _st === 'finaldestination') theme = _st; }catch(e){}
   // Two layered backdrops for the city theme: a far skyline (drawn behind the
   // clouds) and a near rooftop with brick buildings/fence/floor (drawn in front
   // of the clouds). Both are the same size and share one destination rect.
@@ -39,6 +39,9 @@
   var beachImg = new Image(); var beachReady = false;
   beachImg.onload = function(){ beachReady = true; };
   beachImg.src = 'Beach_Scene.webp';
+  var fdImg = new Image(); var fdReady = false;
+  fdImg.onload = function(){ fdReady = true; };
+  fdImg.src = 'Finaldestination.webp';
   var BEACH_SKY = '#068cfc';     // fills any strip above the artwork (matches its top)
   var BEACH_FLOOR_SRC = 828;     // source row of the court's front line
 
@@ -892,7 +895,7 @@
     }
     // Cast shadow + lit shading in the outdoor photo themes (light from the upper
     // left). The default grassy theme keeps the flat, shadow-free look.
-    if(theme === 'city' || theme === 'beach'){
+    if(theme === 'city' || theme === 'beach' || theme === 'finaldestination'){
       var hAbove = GROUND - s.y;
       var sc = Math.max(0.45, 1 - hAbove/420);
       // Tuck the shadow under the slime's FULL base so it meets both base edges
@@ -918,7 +921,7 @@
     ctx.fill();
     // Inner shading clipped to the dome: a soft highlight at the upper-left and
     // a shadow toward the lower-right, selling a single upper-left light source.
-    if(theme === 'city' || theme === 'beach'){
+    if(theme === 'city' || theme === 'beach' || theme === 'finaldestination'){
       ctx.save();
       ctx.clip();
       var hi = ctx.createRadialGradient(s.x - s.r*0.45, s.y - s.r*0.65, s.r*0.05,
@@ -1076,6 +1079,18 @@
       ctx.imageSmoothingEnabled = false;
     }
   }
+  // Final Destination backdrop: one scene scaled to COVER the court (centred, no
+  // distortion). Tweak the y-offset if the platform needs to meet GROUND.
+  function drawFinalDest(){
+    ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0, 0, W, H);
+    if(fdReady){
+      var sc = Math.max(W / fdImg.naturalWidth, H / fdImg.naturalHeight);
+      var dw = fdImg.naturalWidth * sc, dh = fdImg.naturalHeight * sc;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(fdImg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      ctx.imageSmoothingEnabled = false;
+    }
+  }
 
   // Draw the ball. The DRAWN radius can be scaled by a ball skin, but ball.r
   // (used by all the physics) is untouched, so collisions never change.
@@ -1207,6 +1222,8 @@
       drawCityBg();
     } else if(theme === 'beach'){
       drawBeach();
+    } else if(theme === 'finaldestination'){
+      drawFinalDest();
     } else {
       var sky = ctx.createLinearGradient(0, 0, 0, GROUND);
       sky.addColorStop(0, SKY_TOP);
@@ -1215,7 +1232,7 @@
     }
     // drifting clouds over the grassy sky and between the city's two layers; the
     // beach backdrop has its own painted clouds, so skip them there.
-    if(theme !== 'beach'){ for(var c=0;c<CLOUDS.length;c++){ drawCloud(CLOUDS[c]); } }
+    if(theme !== 'beach' && theme !== 'finaldestination'){ for(var c=0;c<CLOUDS.length;c++){ drawCloud(CLOUDS[c]); } }
     if(theme === 'city'){
       drawCityFg(); // near rooftop (buildings/fence/floor), in front of the clouds
     }
@@ -2322,8 +2339,9 @@
     }
   })();
   var themeBtn = document.getElementById('themebtn');
-  var THEMES = ['grassy', 'city', 'beach'];
-  function applyTheme(){ themeBtn.textContent = theme.charAt(0).toUpperCase() + theme.slice(1); }
+  var THEMES = ['grassy', 'city', 'beach', 'finaldestination'];
+  function themeLabel(t){ return t === 'finaldestination' ? 'Final Destination' : (t.charAt(0).toUpperCase() + t.slice(1)); }
+  function applyTheme(){ themeBtn.textContent = themeLabel(theme); }
   applyTheme();
   // Cycle the stage. The beach scene uses the God Rays filter: choosing beach
   // switches the active filter to God Rays; leaving beach (if God Rays were on)
