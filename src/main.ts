@@ -3036,10 +3036,9 @@
       p1Picker.style.display = '';
       p2Picker.style.display = '';
     } else {
-      // 1 Player: Player 2 (AI) isn't editable — keep it visible but dimmed.
+      // 1 Player: Player 2 is the AI opponent — hide its skin picker entirely.
       p1Picker.style.display = '';
-      p2Picker.style.display = '';
-      p2Picker.classList.add('dimmed');
+      p2Picker.style.display = 'none';
     }
   }
   // =================== END SKIN PICKER ===================
