@@ -1082,12 +1082,12 @@
   // Final Destination backdrop: one scene scaled to COVER the court (centred, no
   // distortion). Tweak the y-offset if the platform needs to meet GROUND.
   function drawFinalDest(){
-    ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#020108'; ctx.fillRect(0, 0, W, H);
     if(fdReady){
-      var sc = Math.max(W / fdImg.naturalWidth, H / fdImg.naturalHeight);
+      var sc = Math.max(W / fdImg.naturalWidth, H / fdImg.naturalHeight) * 1.08; // +8% size
       var dw = fdImg.naturalWidth * sc, dh = fdImg.naturalHeight * sc;
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(fdImg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      ctx.drawImage(fdImg, (W - dw) / 2, (H - dh) / 2 + 150, dw, dh); // nudged 150px down
       ctx.imageSmoothingEnabled = false;
     }
   }
@@ -1265,7 +1265,7 @@
     ctx.fillStyle = NETCOL;
     // Beach sits ~16px lower, so draw the net 17px deeper to plant it in the sand.
     // Purely cosmetic — the collision box (GROUND-NET_H..GROUND) is unchanged.
-    var netExtra = (theme === 'beach') ? 17 : 0;
+    var netExtra = (theme === 'beach' || theme === 'finaldestination') ? 17 : 0;
     ctx.fillRect(netX-NET_W/2, GROUND-NET_H, NET_W, NET_H + netExtra);
     // DEBUG: show where a counter reads as BLOCK (high) vs DIG (low).
     if(DEBUG_COUNTER_ZONES && gameMode === 'power'){ drawCounterZones(); }
