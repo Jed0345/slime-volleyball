@@ -1407,10 +1407,14 @@
   }
 
   // ===================== NETWORKING =====================
-  // The WebSocket relay lives on the same origin that served this page,
-  // so we always derive it from location.host. Works on localhost, Render,
-  // custom domains, preview environments — everywhere — with no manual edit.
-  var SERVER_URL = ((location.protocol === 'https:') ? 'wss://' : 'ws://') + location.host;
+  // The WebSocket relay normally lives on the same origin that served this
+  // page (works on localhost, Fly.io, custom domains, preview envs — no
+  // manual edit needed). When the game is hosted somewhere static like
+  // itch.io that can't run Node, build with `VITE_RELAY_URL=wss://your-app.fly.dev`
+  // and that wins over location.host.
+  var _envRelay = ((import.meta as any).env && (import.meta as any).env.VITE_RELAY_URL) || '';
+  var SERVER_URL = _envRelay ||
+    (((location.protocol === 'https:') ? 'wss://' : 'ws://') + location.host);
 
   var ws = null;
 
