@@ -74,6 +74,11 @@
 
   var GRAV = 1.38;
   var MOVE = 6.25;
+  // Analog input quantization. axis is an int in [-15, +15] (4-bit magnitude
+  // + sign). 16 levels each direction = "fine" enough for joystick feel while
+  // keeping the network frame at one byte. Digital input maxes out at AXIS_MAX.
+  var AXIS_MAX = 15;
+  function axisFromDigital(left, right){ return left ? -AXIS_MAX : (right ? AXIS_MAX : 0); }
   var JUMP = 20.0;
   var SLIME_R = 40, BALL_R = 11;
   var NET_W = 6, NET_H = 56;
@@ -272,6 +277,7 @@
             flash: (!left && opp) ? !!opp.flash : false, // AI boss (Psycho) flashes
             onGround:true,
             spikeCD:0, spikeHeld:false, // spike cooldown + edge-detect (sim state)
+            streak:0, // consecutive points scored (Power-Slime aura kicks in at 3)
             counterTried:false}; // AI: rolled-for-this-spike flag (offline only; see aiControl)
   }
   function curOpp(){ return OPPS[oppIdx]; }
@@ -441,6 +447,15 @@
   }
 
   var keys = {};
+  // Touch movement control: 'arrows' (digital d-pad) or 'joystick' (analog,
+  // no deadzone). Persisted across sessions. Default is arrows since that's
+  // what most touch players will expect first; joystick is opt-in via the
+  // "Controls" menu button.
+  var touchControl = 'arrows';
+  try{ var _tc = localStorage.getItem('slimeTouchControl'); if(_tc === 'arrows' || _tc === 'joystick') touchControl = _tc; }catch(e){}
+  // Analog joystick state. joyAxis is a float in [-1, +1] tracking the knob's
+  // horizontal offset from center; joyActive is true while a finger is on it.
+  var joyAxis = 0, joyActive = false;
   function setMsg(t, s){
     document.getElementById('msgtext').innerHTML = t;
     document.getElementById('msgsub').innerHTML = s;
@@ -490,6 +505,10 @@
   function scorePoint(who){
     if(state!=='play') return;
     scores[who]++;
+    // Consecutive-point streak per slime. Drives the Power-Slime aura.
+    // In sim state, so rollback save/restore keeps it correct under mispredict.
+    if(who === 'p1'){ p1.streak = (p1.streak||0) + 1; p2.streak = 0; }
+    else            { p2.streak = (p2.streak||0) + 1; p1.streak = 0; }
     server = who;
     if(scores[who] >= WIN){
       state = 'gameover';
@@ -534,10 +553,11 @@
     }
   }
 
-  function moveSlime(s, mvLeft, mvRight, jump, spd){
-    s.vx = 0;
-    if(mvLeft) s.vx = -spd;
-    if(mvRight) s.vx = spd;
+  // axis is an integer in [-AXIS_MAX, +AXIS_MAX] (-15..+15). Digital input
+  // (keyboard, d-pad, AI) emits the extremes (-AXIS_MAX or +AXIS_MAX) or zero.
+  // The analog joystick emits intermediate values for proportional speed.
+  function moveSlime(s, axis, jump, spd){
+    s.vx = (axis / AXIS_MAX) * spd;
     s.x += s.vx;
     if(jump && s.onGround){ s.vy = -JUMP; s.onGround = false; }
     s.vy += GRAV;
@@ -723,7 +743,7 @@
     if(ballComing && ball.y < GROUND-50 && Math.abs(ball.x - p2.x) < p2.r+16 && ball.vy>=-1){
       if(Math.random() < opp.jumpChance) jp = true;
     }
-    moveSlime(p2, ml, mr, jp, opp.speed);
+    moveSlime(p2, axisFromDigital(ml, mr), jp, opp.speed);
     // Bosses can unleash the same spike. spikeChance ramps with difficulty
     // (weaker bosses leave it 0); availability + cooldown gate it like a player.
     if(p2.spikeCD > 0) p2.spikeCD--;
@@ -894,6 +914,7 @@
   var spikeGhostT = 0, spikeGhostX0 = 0, spikeGhostY0 = 0,
       spikeGhostX1 = 0, spikeGhostY1 = 0, spikeGhostR = 0, spikeGhostCol = '#1c3f6e';
   var ghostCv = null, ghostCtx = null, ghostBlurOK = false; // offscreen buffer for the blended trail
+  var auraCv  = null, auraCtx  = null, auraBlurOK  = false; // offscreen buffer for the streak aura
   var ballSpikeReady = false;
   function darken(hex, f){
     // f<1 darkens; returns a hex string in the same color family
@@ -904,6 +925,120 @@
     var b = Math.round(parseInt(h.substr(4,2),16)*f);
     function c(n){ n = Math.max(0,Math.min(255,n)); var s=n.toString(16); return s.length<2?'0'+s:s; }
     return '#'+c(r)+c(g)+c(b);
+  }
+  function lighten(hex, f){
+    // f=0 returns the same color; f=1 returns white. Blends toward white.
+    var h = hex.replace('#','');
+    if(h.length===3){ h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; }
+    var r = parseInt(h.substr(0,2),16);
+    var g = parseInt(h.substr(2,2),16);
+    var b = parseInt(h.substr(4,2),16);
+    r = Math.round(r + (255-r)*f);
+    g = Math.round(g + (255-g)*f);
+    b = Math.round(b + (255-b)*f);
+    function c(n){ n = Math.max(0,Math.min(255,n)); var s=n.toString(16); return s.length<2?'0'+s:s; }
+    return '#'+c(r)+c(g)+c(b);
+  }
+  // Power-Slime aura: when a slime is on a 3+ scoring streak, render a rising
+  // plume of additive-blended particles around it. Each particle is a soft
+  // radial-gradient blob in a lightened version of the slime's own colour, so
+  // overlapping puffs sum to a brighter glow — the same "WebGL-look" approach
+  // used for the match-point zone effect. Particle state lives on the slime
+  // object but is NOT in the sim state (render-only, intentionally drifty).
+  // Streak aura (Power Slime, 3+ points in a row): vapour particle field.
+  // Each frame spawns a handful of new particles at RANDOM positions across
+  // the upper dome surface, each with independent random initial velocity +
+  // lifetime + curl phase. They rise, expand, fade. Many overlapping puffs
+  // at once + heavy blur on composite = continuous turbulent vapour, not a
+  // pattern of discrete streamers.
+  function drawStreakAura(s){
+    if(!auraCv){
+      auraCv = document.createElement('canvas');
+      auraCv.width = W; auraCv.height = H;
+      auraCtx = auraCv.getContext('2d');
+      auraBlurOK = ('filter' in auraCtx);
+    }
+    if(!s.vapor) s.vapor = [];
+    s.auraT = (s.auraT|0) + 1;
+    var cx = s.x;
+    var cy = s.y;                          // ground / dome base
+    var domeR = s.r;
+
+    // Spawn N new particles per frame at random points on the upper dome's
+    // outer surface. Random over (a) where on the arc they appear, (b) how
+    // they drift, (c) how long they live, (d) their starting size, (e) their
+    // curl phase — so no two have identical trajectories.
+    var SPAWN = 7;
+    // When the slime is moving, give each new particle a backwards kick scaled
+    // to the slime's velocity. The slime then runs away from its own spawn,
+    // and the inherited drag makes particles physically trail behind it —
+    // not just sit where they were born.
+    var trailKick = -s.vx * 0.65;
+    for(var i = 0; i < SPAWN; i++){
+      var ang = Math.PI * 1.10 + Math.random() * Math.PI * 0.80;  // upper ~70% of hemisphere
+      var rOff = 0.85 + Math.random() * 0.18;
+      s.vapor.push({
+        x: cx + Math.cos(ang) * domeR * rOff,
+        y: cy + Math.sin(ang) * domeR * rOff,
+        vx: (Math.random() - 0.5) * 0.25 + trailKick,
+        vy: -0.20 - Math.random() * 0.22,                          // slower rise → shorter column
+        age: 0,
+        maxAge: 16 + ((Math.random() * 14) | 0),                   // 16..30 frames
+        size: 3 + Math.random() * 5,
+        curl: Math.random() * Math.PI * 2
+      });
+    }
+    // Hard cap so an off-screen player doesn't accumulate too many.
+    if(s.vapor.length > 220) s.vapor.splice(0, s.vapor.length - 220);
+
+    var h = lighten(s.col, 0.55).replace('#','');
+    var r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
+    var rgb = r + ',' + g + ',' + b;
+
+    var oc = auraCtx;
+    oc.clearRect(0, 0, W, H);
+    oc.save();
+    oc.beginPath();
+    oc.rect(0, 0, W, cy);                  // clip to above ground
+    oc.clip();
+
+    // Update + render every particle. Iterate backwards so we can splice dead
+    // ones in place.
+    for(var j = s.vapor.length - 1; j >= 0; j--){
+      var p = s.vapor[j];
+      // Physics: rise with deceleration, plus per-particle horizontal curl.
+      p.x += p.vx + Math.sin(p.age * 0.08 + p.curl) * 0.18;
+      p.y += p.vy;
+      p.vy *= 0.99;
+      p.vx *= 0.99;
+      p.age++;
+      if(p.age >= p.maxAge){ s.vapor.splice(j, 1); continue; }
+
+      var f = p.age / p.maxAge;                                    // 0 → 1
+      var alpha = Math.sin(f * Math.PI) * 0.38;                    // bell curve
+      var size = p.size + f * 9;                                    // expands as it climbs
+      var grad = oc.createRadialGradient(p.x, p.y, 0, p.x, p.y, size);
+      grad.addColorStop(0, 'rgba(' + rgb + ',' + alpha.toFixed(3) + ')');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+      oc.fillStyle = grad;
+      oc.beginPath();
+      oc.arc(p.x, p.y, size, 0, Math.PI * 2);
+      oc.fill();
+    }
+    oc.restore();
+
+    // Heavy blur on composite merges the field of independent puffs into a
+    // single turbulent mass of vapour — the same offscreen-then-blur trick
+    // the spike-ghost uses for its smoothed silhouette. Blur radius scales
+    // with the slime's horizontal speed so the trail smears more the faster
+    // it's moving (still: 9px, full sprint: ~18px).
+    ctx.save();
+    if(auraBlurOK){
+      var motionBlur = 9 + Math.min(Math.abs(s.vx) * 1.4, 9);
+      ctx.filter = 'blur(' + motionBlur.toFixed(1) + 'px)';
+    }
+    ctx.drawImage(auraCv, 0, 0);
+    ctx.restore();
   }
 
   // Match-point aura (Power Slime): a glowing red light trail that follows the
@@ -953,6 +1088,16 @@
     ctx.restore();
   }
   function drawSlime(s){
+    // Power-Slime aura when on a 3+ scoring streak. Gated off via `false &&`
+    // for now — flip the false to re-enable. When the streak drops (or the
+    // effect is disabled), we still clear timer + particle list so nothing
+    // lingers in memory.
+    if(false && gameMode === 'power' && (s.streak|0) >= 3){
+      drawStreakAura(s);
+    } else if(s.auraT || s.vapor){
+      s.auraT = 0;
+      s.vapor = null;
+    }
     var col = s.col;
     var outline = darken(s.cold, 0.7);
     if(s.flash){
@@ -1656,33 +1801,44 @@
                              // saw desyncs when a restart trigger arrived later than
                              // the new-sim inputs that were sent right after it.
 
-  var NOINPUT = {left:false, right:false, jump:false, spike:false};
+  var NOINPUT = {ax:0, jump:false, spike:false};
   function sampleLocalInput(){
-    var left  = !!(keys['a']||keys['A']||keys['ArrowLeft']);
-    var right = !!(keys['d']||keys['D']||keys['ArrowRight']);
     var jump  = !!(keys['w']||keys['W']||keys['ArrowUp']||keys[' ']);
     var spike = !!(keys['s']||keys['S']||keys['ArrowDown']); // not directional, no mirror
-    // The guest's view is mirrored (they see themselves on the left), so swap
-    // horizontal input: pressing "right" should move their slime toward the net
-    // on screen. The sent input is already in simulation space, so both peers
+    var ax = 0;
+    // Joystick wins when it's the active touch control and being held — that's
+    // the only path that produces analog (fractional) magnitudes. Otherwise fall
+    // back to keyboard / d-pad, which are full-magnitude digital.
+    if(touchControl === 'joystick' && joyActive){
+      // joyAxis is float in [-1, +1]; quantize to the network grid.
+      var q = Math.round(joyAxis * AXIS_MAX);
+      ax = q < -AXIS_MAX ? -AXIS_MAX : (q > AXIS_MAX ? AXIS_MAX : q);
+    } else {
+      var left  = !!(keys['a']||keys['A']||keys['ArrowLeft']);
+      var right = !!(keys['d']||keys['D']||keys['ArrowRight']);
+      ax = axisFromDigital(left, right);
+    }
+    // The guest's view is mirrored (they see themselves on the left), so flip
+    // the axis sign: pushing "right" should move their slime toward the net on
+    // screen. The sent input is already in simulation space, so both peers
     // stay in lockstep.
-    if(netMode === 'guest'){ var t = left; left = right; right = t; }
-    return {left:left, right:right, jump:jump, spike:spike};
+    if(netMode === 'guest') ax = -ax;
+    return {ax:ax, jump:jump, spike:spike};
   }
-  function inputsEqual(a, b){ return a.left===b.left && a.right===b.right && a.jump===b.jump && a.spike===b.spike; }
+  function inputsEqual(a, b){ return a.ax===b.ax && a.jump===b.jump && a.spike===b.spike; }
 
   // Full snapshot of everything the simulation reads/writes, for save/restore.
   function getGameState(){
     return {
-      p1:{x:p1.x, y:p1.y, vx:p1.vx, vy:p1.vy, g:p1.onGround, scd:p1.spikeCD, sh:p1.spikeHeld},
-      p2:{x:p2.x, y:p2.y, vx:p2.vx, vy:p2.vy, g:p2.onGround, scd:p2.spikeCD, sh:p2.spikeHeld},
+      p1:{x:p1.x, y:p1.y, vx:p1.vx, vy:p1.vy, g:p1.onGround, scd:p1.spikeCD, sh:p1.spikeHeld, sk:p1.streak|0},
+      p2:{x:p2.x, y:p2.y, vx:p2.vx, vy:p2.vy, g:p2.onGround, scd:p2.spikeCD, sh:p2.spikeHeld, sk:p2.streak|0},
       ball:{x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy, live:ball.live, sp:ball.spiked},
       a:scores.p1, b:scores.p2, sv:server, st:state, bs:bounceSeq, bps:bouncePlayerSeq, cs:counterSeq
     };
   }
   function setGameState(s){
-    p1.x=s.p1.x; p1.y=s.p1.y; p1.vx=s.p1.vx; p1.vy=s.p1.vy; p1.onGround=s.p1.g; p1.spikeCD=s.p1.scd||0; p1.spikeHeld=!!s.p1.sh;
-    p2.x=s.p2.x; p2.y=s.p2.y; p2.vx=s.p2.vx; p2.vy=s.p2.vy; p2.onGround=s.p2.g; p2.spikeCD=s.p2.scd||0; p2.spikeHeld=!!s.p2.sh;
+    p1.x=s.p1.x; p1.y=s.p1.y; p1.vx=s.p1.vx; p1.vy=s.p1.vy; p1.onGround=s.p1.g; p1.spikeCD=s.p1.scd||0; p1.spikeHeld=!!s.p1.sh; p1.streak=s.p1.sk|0;
+    p2.x=s.p2.x; p2.y=s.p2.y; p2.vx=s.p2.vx; p2.vy=s.p2.vy; p2.onGround=s.p2.g; p2.spikeCD=s.p2.scd||0; p2.spikeHeld=!!s.p2.sh; p2.streak=s.p2.sk|0;
     ball.x=s.ball.x; ball.y=s.ball.y; ball.vx=s.ball.vx; ball.vy=s.ball.vy; ball.live=s.ball.live; ball.spiked=!!s.ball.sp;
     scores.p1=s.a; scores.p2=s.b; server=s.sv; state=s.st; bounceSeq=s.bs||0; bouncePlayerSeq=s.bps||0; counterSeq=s.cs||0;
   }
@@ -1697,8 +1853,8 @@
       if(srv && srv.jump) startPoint();
       if(state !== 'play') return;
     }
-    moveSlime(p1, inA.left, inA.right, inA.jump, MOVE);
-    moveSlime(p2, inB.left, inB.right, inB.jump, MOVE);
+    moveSlime(p1, inA.ax, inA.jump, MOVE);
+    moveSlime(p2, inB.ax, inB.jump, MOVE);
     tickSpike(p1, inA.spike, p2);
     tickSpike(p2, inB.spike, p1);
     updateBall(); // may end the point/match (purely — DOM is suppressed during sim)
@@ -1740,13 +1896,19 @@
     var applyF = rb.frame + INPUT_DELAY;
     if(rb.local[applyF] === undefined){ rb.local[applyF] = sampleLocalInput(); } // lock this frame's input once
     // Send the newest frame plus a redundant window of recent ones, packed one
-    // byte per frame (bit0 left, bit1 right, bit2 jump, bit3 spike). Sent every tick so the
-    // unreliable channel self-heals dropped packets; the WS fallback dedupes by
-    // frame, so resends are harmless.
+    // byte per frame:
+    //   bits 0-3 = |axis| magnitude (0..15)
+    //   bit 4    = sign (1 = negative)
+    //   bit 5    = jump
+    //   bit 6    = spike
+    // Sent every tick so the unreliable channel self-heals dropped packets;
+    // the WS fallback dedupes by frame, so resends are harmless.
     var hist = [];
     for(var hf = applyF - INPUT_REDUNDANCY + 1; hf <= applyF; hf++){
       var li = (hf >= 0 && rb.local[hf]) ? rb.local[hf] : NOINPUT;
-      hist.push((li.left?1:0) | (li.right?2:0) | (li.jump?4:0) | (li.spike?8:0));
+      var mag = Math.abs(li.ax|0) & 15;
+      var sign = (li.ax|0) < 0 ? 16 : 0;
+      hist.push(mag | sign | (li.jump?32:0) | (li.spike?64:0));
     }
     rtcSend({type:'in', f:applyF, n:hist});
     if(rb.frame - rb.lastRemoteFrame > MAX_ROLLBACK){ rb.stalled = true; return; }
@@ -1783,7 +1945,11 @@
       var fr = end - (arr.length - 1) + i;
       if(fr < 0 || fr > sane || rb.remote[fr]) continue; // out of range or already confirmed
       var bits = arr[i]|0;
-      var inp = {left:!!(bits&1), right:!!(bits&2), jump:!!(bits&4), spike:!!(bits&8)};
+      // See the encoder in rbTick for the bit layout. mag is 0..15; sign flips
+      // it negative. ax stays the integer axis (decoded by moveSlime as ax/AXIS_MAX).
+      var mag = bits & 15;
+      var ax = (bits & 16) ? -mag : mag;
+      var inp = {ax:ax, jump:!!(bits&32), spike:!!(bits&64)};
       rb.remote[fr] = inp;
       if(fr > rb.lastRemoteFrame){ rb.lastRemoteFrame = fr; rb.lastRemoteInput = inp; }
       if(fr < rb.frame && rb.used[fr] && rb.saved[fr] && !inputsEqual(rb.used[fr], inp)){
@@ -1808,6 +1974,10 @@
   // future-frame orphans and the guest would stall after MAX_ROLLBACK frames.
   function rbResync(scP1, scP2, srv, frame){
     scores.p1 = scP1|0; scores.p2 = scP2|0;
+    // The in-flight rally is being thrown out; clear streak history too so
+    // the aura doesn't flicker from a stale guess. The next point will set
+    // it correctly from the now-authoritative scoring.
+    if(p1) p1.streak = 0; if(p2) p2.streak = 0;
     server = (srv === 'p2') ? 'p2' : 'p1';
     resetPositions(server);
     state = (scores.p1 >= WIN || scores.p2 >= WIN) ? 'gameover' : 'point';
@@ -2118,6 +2288,7 @@
   function startRematch(){
     hideRematch();
     scores = {p1:0, p2:0};
+    if(p1) p1.streak = 0; if(p2) p2.streak = 0; // fresh match, fresh streaks
     server = 'p1';
     resetPositions(server);
     state = 'point';
@@ -2144,19 +2315,27 @@
       rbTick();
     } else if(state==='play' && !userPaused){ // offline; frozen while manually paused
       if(twoPlayer){
-        moveSlime(p1, keys['a']||keys['A'], keys['d']||keys['D'], keys['w']||keys['W'], MOVE);
-        var p2l = keys['j']||keys['J']||keys['ArrowLeft'];
-        var p2r = keys['l']||keys['L']||keys['ArrowRight'];
-        var p2j = keys['i']||keys['I']||keys['ArrowUp'];
-        moveSlime(p2, p2l, p2r, p2j, MOVE);
+        // P1 keyboard; in 2P the joystick (if shown) only drives P1 as well.
+        var p1ax_2p = (touchControl === 'joystick' && joyActive)
+          ? Math.max(-AXIS_MAX, Math.min(AXIS_MAX, Math.round(joyAxis * AXIS_MAX)))
+          : axisFromDigital(!!(keys['a']||keys['A']), !!(keys['d']||keys['D']));
+        moveSlime(p1, p1ax_2p, !!(keys['w']||keys['W']), MOVE);
+        var p2l = !!(keys['j']||keys['J']||keys['ArrowLeft']);
+        var p2r = !!(keys['l']||keys['L']||keys['ArrowRight']);
+        var p2j = !!(keys['i']||keys['I']||keys['ArrowUp']);
+        moveSlime(p2, axisFromDigital(p2l, p2r), p2j, MOVE);
         tickSpike(p1, !!(keys['s']||keys['S']), p2);    // P1 spikes with S
         tickSpike(p2, !!keys['ArrowDown'], p1);          // P2 spikes with Down
         updateBall();
       } else {
-        var ml = keys['a']||keys['A']||keys['ArrowLeft'];
-        var mr = keys['d']||keys['D']||keys['ArrowRight'];
-        var jp = keys['w']||keys['W']||keys['ArrowUp']||keys[' '];
-        moveSlime(p1, ml, mr, jp, MOVE);
+        var ml = !!(keys['a']||keys['A']||keys['ArrowLeft']);
+        var mr = !!(keys['d']||keys['D']||keys['ArrowRight']);
+        var jp = !!(keys['w']||keys['W']||keys['ArrowUp']||keys[' ']);
+        // Joystick (when active) overrides digital arrows with an analog axis.
+        var ax1 = (touchControl === 'joystick' && joyActive)
+          ? Math.max(-AXIS_MAX, Math.min(AXIS_MAX, Math.round(joyAxis * AXIS_MAX)))
+          : axisFromDigital(ml, mr);
+        moveSlime(p1, ax1, jp, MOVE);
         tickSpike(p1, !!(keys['s']||keys['S']||keys['ArrowDown']), p2);
         aiControl(); // the CPU handles its own spike inside aiControl
         updateBall();
@@ -2347,6 +2526,105 @@
       pressedAt(e.clientX, e.clientY);
     });
     window.addEventListener('mouseup', function(){ if(usingMouse) release(); });
+  })();
+
+  // Analog joystick — opt-in alternative to the d-pad. NO DEADZONE: the smallest
+  // horizontal offset of the knob from center yields a proportional fractional
+  // axis. The knob is locked to the horizontal axis (vertical drag is ignored —
+  // jump uses the dedicated button). Updates the joyAxis / joyActive globals,
+  // which sampleLocalInput / offline step pick up.
+  (function setupJoystick(){
+    var base = document.getElementById('joystick-base');
+    var knob = document.getElementById('joystick-knob');
+    if(!base || !knob) return;
+    var activeTouchId = null;
+    var usingMouse = false;
+    function applyOffset(x){
+      var r = base.offsetWidth / 2;
+      var maxR = r - 14;                  // keep the knob fully inside the ring
+      if(x > maxR) x = maxR;
+      else if(x < -maxR) x = -maxR;
+      knob.style.transform = 'translate(calc(-50% + ' + x + 'px), -50%)';
+      // No deadzone: axis is the raw normalized offset, clamped to [-1, +1].
+      joyAxis = (maxR > 0) ? (x / maxR) : 0;
+      joyActive = true;
+    }
+    function release(){
+      knob.style.transform = '';
+      joyAxis = 0; joyActive = false;
+      base.classList.remove('active');
+      activeTouchId = null;
+      usingMouse = false;
+    }
+    function offsetFromEvent(cx){
+      var rect = base.getBoundingClientRect();
+      return cx - rect.left - rect.width/2;
+    }
+    base.addEventListener('touchstart', function(e){
+      e.preventDefault();
+      if(activeTouchId !== null) return;
+      var t = e.changedTouches[0];
+      activeTouchId = t.identifier;
+      base.classList.add('active');
+      applyOffset(offsetFromEvent(t.clientX));
+      tryServe();
+    }, {passive:false});
+    base.addEventListener('touchmove', function(e){
+      if(activeTouchId === null) return;
+      for(var i=0; i<e.changedTouches.length; i++){
+        var t = e.changedTouches[i];
+        if(t.identifier === activeTouchId){
+          e.preventDefault();
+          applyOffset(offsetFromEvent(t.clientX));
+          break;
+        }
+      }
+    }, {passive:false});
+    function onTouchEnd(e){
+      if(activeTouchId === null) return;
+      for(var i=0; i<e.changedTouches.length; i++){
+        if(e.changedTouches[i].identifier === activeTouchId){
+          e.preventDefault();
+          release();
+          break;
+        }
+      }
+    }
+    base.addEventListener('touchend', onTouchEnd, {passive:false});
+    base.addEventListener('touchcancel', onTouchEnd, {passive:false});
+    // Mouse fallback for desktop devtools testing.
+    base.addEventListener('mousedown', function(e){
+      e.preventDefault(); usingMouse = true; base.classList.add('active');
+      applyOffset(offsetFromEvent(e.clientX));
+      tryServe();
+    });
+    window.addEventListener('mousemove', function(e){
+      if(!usingMouse) return;
+      applyOffset(offsetFromEvent(e.clientX));
+    });
+    window.addEventListener('mouseup', function(){ if(usingMouse) release(); });
+  })();
+
+  // Controls-style toggle (touch only): cycle the Touch movement control.
+  function applyTouchControl(){
+    document.body.classList.toggle('joy-on', touchControl === 'joystick');
+    var btn = document.getElementById('touchctrlbtn');
+    if(btn) btn.textContent = 'Controls: ' + (touchControl === 'joystick' ? 'Joystick' : 'Arrows');
+    // Clear analog state when switching away from joystick so a leftover finger
+    // position doesn't keep the slime drifting.
+    if(touchControl !== 'joystick'){ joyAxis = 0; joyActive = false; }
+  }
+  (function setupTouchCtrlBtn(){
+    var btn = document.getElementById('touchctrlbtn');
+    if(!btn) return;
+    // Only show the toggle on actual touch devices — pointless on desktop.
+    if(isTouch()) btn.style.display = '';
+    btn.addEventListener('click', function(){
+      touchControl = (touchControl === 'joystick') ? 'arrows' : 'joystick';
+      try{ localStorage.setItem('slimeTouchControl', touchControl); }catch(e){}
+      applyTouchControl();
+    });
+    applyTouchControl();
   })();
 
   // Controls opacity: the slider fades the joystick + JUMP button so they don't
@@ -3267,7 +3545,7 @@
       ids.forEach(function(id){ var el = document.getElementById(id); if(el) cat.appendChild(el); });
     }
     moveInto('cat-online', ['onlinebtn','lobby','leavebtn']);
-    moveInto('cat-mode',   ['modebtn','oppbtn','gamemodebtn','winmodebtn','resetbtn','controlhint','powerhint']);
+    moveInto('cat-mode',   ['modebtn','oppbtn','gamemodebtn','winmodebtn','touchctrlbtn','resetbtn','controlhint','powerhint']);
     moveInto('cat-skins',  ['skin-grid']);
     // Each of these reads as a label to the LEFT of its button (the button shows
     // just the value). Hiding a control hides its whole field (see fieldOf).
@@ -3286,6 +3564,7 @@
       labelField('themebtn', 'Stage');
       labelField('filterbtn', 'Filter');
       labelField('resetbtn', 'Game');
+      labelField('touchctrlbtn', 'Touch');
     })();
     // Stage + Filter get their own category, moved out of the Skins pane.
     (function(){
