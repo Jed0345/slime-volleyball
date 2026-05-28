@@ -497,7 +497,7 @@
     // Host is the score authority — emit canonical scores at the moment of
     // truth so the guest snaps back if their sim diverged on this point.
     // (The periodic heartbeat in rbTick is a safety net; this is the fast path.)
-    if(netMode === 'host'){ netSend({type:'score-sync', a:scores.p1, b:scores.p2, sv:server}); }
+    if(netMode === 'host'){ netSend({type:'score-sync', a:scores.p1, b:scores.p2, sv:server, f:rb ? rb.frame : 0}); }
     updateScore();
     if(state === 'gameover'){
       var label = (who==='p1') ? 'BLUE<br>WINS!' : (twoPlayer ? 'PINK<br>WINS!' : nameFor(who)+'<br>WINS');
@@ -1746,7 +1746,7 @@
     // to these values if its local scores differ. State is recomputed from scores
     // by rbResync so we don't need to send it.
     if(netMode === 'host' && rb.frame % 60 === 0){
-      netSend({type:'score-sync', a:scores.p1, b:scores.p2, sv:server});
+      netSend({type:'score-sync', a:scores.p1, b:scores.p2, sv:server, f:rb.frame});
     }
   }
   // A peer input packet arrived (a redundant window of frames). Store any frames
@@ -1782,15 +1782,23 @@
       simReplaying = false;
     }
   }
-  // Reconnect: the side that stayed is authoritative for the score. Both peers
-  // reset to a fresh point at frame 0 with these scores (the in-flight rally is
-  // lost, but the score is preserved and the rollback clocks re-align cleanly).
-  function rbResync(scP1, scP2, srv){
+  // Reconnect / score-drift recovery: snap to the authoritative (host) score
+  // and start a fresh point. If `frame` is provided the rollback clock aligns
+  // to it so subsequent inputs from the peer (which carry that frame number)
+  // pass the stale-session filter in rbOnRemoteInput. Without that, calling
+  // this mid-match would silently freeze the sim: rb.frame would reset to 0,
+  // but the peer's inputs (still at frame ~1000) would be filtered as
+  // future-frame orphans and the guest would stall after MAX_ROLLBACK frames.
+  function rbResync(scP1, scP2, srv, frame){
     scores.p1 = scP1|0; scores.p2 = scP2|0;
     server = (srv === 'p2') ? 'p2' : 'p1';
     resetPositions(server);
     state = (scores.p1 >= WIN || scores.p2 >= WIN) ? 'gameover' : 'point';
     rbStart(rb ? rb.side : (netMode === 'host' ? 'p1' : 'p2'));
+    if(typeof frame === 'number' && frame > 0){
+      rb.frame = frame|0;
+      rb.lastRemoteFrame = (frame|0) - 1; // claim freshness so MAX_ROLLBACK doesn't trip immediately
+    }
     netPaused = false;
     updateScore();
   }
@@ -2038,7 +2046,10 @@
     // which is fine: it had already gone wrong silently before we noticed.
     if(m.type === 'score-sync'){
       if(netMode === 'guest' && (m.a !== scores.p1 || m.b !== scores.p2 || m.sv !== server)){
-        rbResync(m.a|0, m.b|0, (m.sv === 'p2') ? 'p2' : 'p1');
+        // Pass the host's rb.frame so the guest's clock aligns to it; otherwise
+        // the stale-session filter would reject every subsequent input from the
+        // host and the sim would freeze.
+        rbResync(m.a|0, m.b|0, (m.sv === 'p2') ? 'p2' : 'p1', (typeof m.f === 'number') ? m.f : undefined);
       }
       return;
     }
