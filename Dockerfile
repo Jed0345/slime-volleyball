@@ -1,10 +1,12 @@
-# Slime Volleyball 2 — Fly.io relay image.
+# Slime Volleyball 2 — relay image.
 #
 # Stage 1 builds the Vite bundle so the relay can also serve a live
 # fallback copy of the game. Stage 2 is the slim runtime image.
-# The relay listens on PORT (defaults to 8080, which is Fly's internal
-# port). To deploy: `fly launch --copy-config` (first time), then
-# `fly deploy` on every subsequent push.
+# The relay listens on PORT (Railway/Render/most PaaS hosts inject this
+# env var at runtime; falls back to 8080 for local Docker runs).
+# Hosted on Railway: every push to main auto-deploys via its native
+# GitHub integration — no workflow file needed; Railway reads this
+# Dockerfile directly.
 
 # ---- Build stage ----
 FROM node:20-alpine AS build
