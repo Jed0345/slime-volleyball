@@ -351,8 +351,8 @@
     // when Power rules are on (the below-game copy still shows both).
     var _mch = document.getElementById('controlhint');
     if(_mch) _mch.style.display = (gameMode === 'power') ? 'none' : '';
-    var _phFull = 'Power Slime: <b style="color:#fff36b">S</b> to spike, or block / counter / dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
-    var _phShort = '<b style="color:#fff36b">S</b> to spike, or block / counter / dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
+    var _phFull = 'Power Slime: <b style="color:#fff36b">S</b> to spike, or to block/dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
+    var _phShort = '<b style="color:#fff36b">S</b> to spike, or to block/dig &nbsp;&middot;&nbsp; Counter zones: <b>C</b>';
     var phs = document.querySelectorAll('.powerhint');
     for(var _pi=0; _pi<phs.length; _pi++){
       phs[_pi].innerHTML = (phs[_pi].id === 'powerhint') ? _phShort : _phFull;
@@ -3126,6 +3126,15 @@
       _row.appendChild(bar); bar.classList.add('below-game');
       var _mus = document.getElementById('musicbtn'); if(_mus) _row.appendChild(_mus);
     }
+    // Stage pane: clicking Stage/Filter dims the panel briefly so the new stage
+    // shows through (resets on each click so you can cycle).
+    [['themebtn','preview-stage'],['filterbtn','preview-filter']].forEach(function(pair){
+      var _b = document.getElementById(pair[0]), _cls = pair[1];
+      if(_b && panel){
+        _b.addEventListener('click', function(){ panel.classList.add('preview', _cls); });
+        _b.addEventListener('mouseleave', function(){ panel.classList.remove('preview', _cls); }); // restore only when the mouse leaves the button
+      }
+    });
 
     var activeCat = null;
     function setCat(cat){
