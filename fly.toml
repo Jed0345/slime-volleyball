@@ -14,6 +14,7 @@ primary_region = 'ewr'
   auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
+  max_machines_running = 1   # Pin to 1: rooms live in process memory, so 2 machines = players can't find each other.
   processes = ['app']
 
 [[vm]]
