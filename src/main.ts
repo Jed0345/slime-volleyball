@@ -156,6 +156,9 @@
   // Networking state: netMode is 'host', 'guest', or null (offline).
   var netMode = null;
   var hosting = false; // created/connected a room: Leave (red) replaces Create in the lobby
+  var specCount = 0;     // host: how many spectators are watching
+  var specTarget = null; // spectator: latest received state snapshot
+  var _specFrame = 0;
   var netPaused = false; // true while the opponent is mid-reconnect (grace window)
   // Online uses ROLLBACK netcode: both peers run the identical deterministic
   // simulation, exchange only per-frame inputs, predict the opponent's input
@@ -274,12 +277,12 @@
   function curOpp(){ return OPPS[oppIdx]; }
 
   function resetSlimes(){
-    p1.x = W*0.25; p1.y = GROUND; p1.vx=0; p1.vy=0; p1.onGround=true;
-    p2.x = W*0.75; p2.y = GROUND; p2.vx=0; p2.vy=0; p2.onGround=true;
+    p1.x = W*0.25 - 20; p1.y = GROUND; p1.vx=0; p1.vy=0; p1.onGround=true;
+    p2.x = W*0.75 + 20; p2.y = GROUND; p2.vx=0; p2.vy=0; p2.onGround=true;
   }
   function resetPositions(toServer){
     resetSlimes();
-    var sx = (toServer==='p1') ? W*0.25 : W*0.75;
+    var sx = (toServer==='p1') ? W*0.25 - 20 : W*0.75 + 20;
     ball = {x:sx, y:GROUND-170, vx:0, vy:0, r:BALL_R, live:false, spiked:false};
   }
   function init(){
@@ -444,6 +447,12 @@
     el.classList.remove('play');
     void el.offsetWidth; // force reflow so the animation can replay
     el.classList.add('play');
+  }
+  var _zoneShown = false; // whether the "in the zone" cue fired for the current match point
+  function showZonePop(){
+    var el = document.getElementById('zone-pop');
+    if(!el) return;
+    el.classList.remove('play'); void el.offsetWidth; el.classList.add('play');
   }
 
   function startPoint(){
@@ -884,6 +893,52 @@
     return '#'+c(r)+c(g)+c(b);
   }
 
+  // Match-point aura (Power Slime): a glowing red light trail that follows the
+  // eye (a soft blob when idle, a streak while moving) plus occasional sparks.
+  // Additive ('lighter') blending gives a shader-like glow without WebGL.
+  function drawZoneFx(s, ex, ey, er){
+    if(!s.zoneTrail){ s.zoneTrail = []; s.zoneT = 0; s.zoneFlash = 0; s.zoneSeed = 0; }
+    s.zoneT++;
+    var moving = Math.abs(s.vx) > 0.4;
+    s.zoneTrail.push({x:ex, y:ey});
+    if(s.zoneTrail.length > 24) s.zoneTrail.shift();
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // soft core glow at the eye (always)
+    var g = ctx.createRadialGradient(ex, ey, 0, ex, ey, er*1.8);
+    g.addColorStop(0, 'rgba(255,70,70,0.5)'); g.addColorStop(1, 'rgba(255,40,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ex, ey, er*1.8, 0, Math.PI*2); ctx.fill();
+    if(moving){
+      // moving: a glowing light trail follows the eye
+      ctx.lineCap = 'round';
+      for(var t=1; t<s.zoneTrail.length; t++){
+        var k = t / s.zoneTrail.length;
+        ctx.strokeStyle = 'rgba(255,80,80,' + (0.32*k).toFixed(3) + ')';
+        ctx.lineWidth = er * 0.55 * k;
+        ctx.beginPath(); ctx.moveTo(s.zoneTrail[t-1].x, s.zoneTrail[t-1].y); ctx.lineTo(s.zoneTrail[t].x, s.zoneTrail[t].y); ctx.stroke();
+      }
+    } else {
+      // idle: lightning streaks flash out, then go dark until the next flash
+      if(s.zoneFlash <= 0 && Math.random() < 0.06){ s.zoneFlash = 11; s.zoneSeed = Math.random() * 6.28; } // flash at random intervals
+      if(s.zoneFlash > 0){
+        var fa = s.zoneFlash / 11; // bright -> fade across the flash
+        ctx.strokeStyle = 'rgba(255,90,90,' + (0.9*fa).toFixed(3) + ')';
+        ctx.lineCap = 'round'; ctx.lineWidth = 1.4;
+        for(var b=0; b<5; b++){
+          var dir = (b % 2 === 0) ? 1 : -1;          // horizontal only: alternate right/left
+          var len = er * (5.5 + (b % 3) * 1.4);      // long streaks
+          ctx.beginPath(); ctx.moveTo(ex, ey);
+          for(var si=1; si<=4; si++){
+            var tt = si/4;
+            ctx.lineTo(ex + dir*len*tt, ey + Math.sin(b*13.7 + si*5.1 + s.zoneSeed) * er * 0.6);
+          }
+          ctx.stroke();
+        }
+        s.zoneFlash--;
+      }
+    }
+    ctx.restore();
+  }
   function drawSlime(s){
     var col = s.col;
     var outline = darken(s.cold, 0.7);
@@ -958,6 +1013,10 @@
     var pr = er*0.5;
     ctx.fillStyle = outline;
     ctx.beginPath(); ctx.arc(ex+Math.cos(ang)*er*0.45, ey+Math.sin(ang)*er*0.45, pr, 0, Math.PI*2); ctx.fill();
+    // Match point (Power Slime): glowing red light trail + occasional sparks.
+    if(gameMode === 'power' && ((s === p1 && scores.p1 === WIN - 1) || (s === p2 && scores.p2 === WIN - 1))){
+      drawZoneFx(s, ex, ey, er);
+    } else if(s.zoneTrail){ s.zoneTrail = null; s.zoneSparks = null; }
     // The White Slime wears shades (shades.svg): scaled to the slime, centred
     // over the eye and mirrored to face the way it's looking. Drawn once loaded.
     if(false && s.col === '#f3f3f3' && shadesReady && theme === 'beach'){ // shades disabled for now
@@ -1217,6 +1276,11 @@
     // Counter popup, fired the same rollback-safe way as the bounce SFX: the sim
     // bumps counterSeq, draw() (never run during replays) shows it once.
     if(counterSeq > _lastCounterShown) showCounteredPop();
+    // "You're in the zone" — announced once when a Power-Slime player hits match point.
+    var _myScore = (netMode === 'guest') ? scores.p2 : (twoPlayer ? Math.max(scores.p1, scores.p2) : scores.p1);
+    var _atZone = (gameMode === 'power') && netMode !== 'spectator' && (_myScore === WIN - 1);
+    if(_atZone && !_zoneShown){ _zoneShown = true; showZonePop(); }
+    else if(!_atZone){ _zoneShown = false; }
     _lastCounterShown = counterSeq;
     if(theme === 'city'){
       drawCityBg();
@@ -1521,6 +1585,10 @@
     if(!code || code.length < 1){ lobbyStatus('Enter a code first.'); return; }
     netConnect(function(){ netSend({type:'join', code:code}); });
   }
+  function netSpectate(code){
+    if(!code || code.length < 1){ lobbyStatus('Enter a code first.'); return; }
+    netConnect(function(){ netSend({type:'spectate', code:code}); });
+  }
 
   // Remember the current online room so a page refresh can rejoin it instead of
   // dropping out. Cleared only when the room truly ends (leave / opponent gone).
@@ -1780,6 +1848,40 @@
     if(asHost) rtcStart(true);
   }
 
+  // --- Spectator mode: watch a match rendered from the host's state snapshots ---
+  function enterSpectator(){
+    netMode = 'spectator';
+    p1 = newSlime(true, null);
+    p2 = newSlime(false, null);
+    p2.col = PINK; p2.cold = PINK_D; p2.r = SLIME_R;
+    scores = {p1:0, p2:0}; server = 'p1'; state = 'point';
+    resetPositions(server);
+    document.getElementById('stage').classList.remove('mirror');
+    document.getElementById('sv-board').classList.remove('mirror');
+    document.getElementById('p1name').textContent = 'BLUE';
+    document.getElementById('p2name').textContent = 'PINK';
+    fieldOf(document.getElementById('oppbtn')).style.display = 'none';
+    fieldOf(document.getElementById('modebtn')).style.display = 'none';
+    setLobbyCreating(true); // hide create/join; the Leave button stops spectating
+    updateScore();
+    setMsg('SPECTATING', 'WAITING FOR THE MATCH...');
+    startPing();
+  }
+  function presentSpec(){
+    if(!specTarget) return;
+    p1.x += (specTarget.p1x - p1.x) * 0.35; p1.y += (specTarget.p1y - p1.y) * 0.35;
+    p2.x += (specTarget.p2x - p2.x) * 0.35; p2.y += (specTarget.p2y - p2.y) * 0.35;
+    ball.x += (specTarget.bx - ball.x) * 0.35; ball.y += (specTarget.by - ball.y) * 0.35;
+    ball.spiked = !!specTarget.bsp; server = specTarget.sv;
+    if(scores.p1 !== specTarget.a || scores.p2 !== specTarget.b){ scores.p1 = specTarget.a|0; scores.p2 = specTarget.b|0; updateScore(); }
+    if(state !== specTarget.st){
+      state = specTarget.st;
+      if(state === 'play'){ hideMsg(); }
+      else if(state === 'gameover'){ setMsg('GAME OVER', (scores.p1 >= WIN ? 'BLUE' : 'PINK') + ' WINS'); }
+      else { setMsg('SPECTATING', ''); }
+    }
+  }
+
   // WebSocket messages: handle WebRTC signaling here (it only ever arrives over
   // the relay), then defer everything else to the shared dispatcher.
   function netOnMessage(ev){
@@ -1803,6 +1905,12 @@
       return;
     }
     if(m.type === 'netping'){ if(typeof m.ms === 'number'){ peerPing = m.ms; updatePingUI(); } return; }
+
+    // Spectator wiring (host broadcasts state; spectators just render it).
+    if(m.type === 'spec-count'){ specCount = m.n|0; return; }
+    if(m.type === 'spectating'){ enterSpectator(); return; }
+    if(m.type === 'spec-state'){ specTarget = m; return; }
+    if(m.type === 'spec-ended'){ netMode = null; specTarget = null; setMsg('MATCH ENDED', 'THE PLAYERS LEFT'); return; }
 
     if(m.type === 'created'){ saveRoom(m.code, 'host'); lobbyStatus('Share this code: ' + m.code + ' — waiting for a friend to join...'); return; }
     if(m.type === 'joined'){ saveRoom(m.code, 'guest'); lobbyStatus('Joined! Starting...'); return; }
@@ -1963,6 +2071,7 @@
   // raw requestAnimationFrame loop runs 2-4x too fast on 120/144/240Hz
   // displays, which is why it looked too fast on some Windows machines.)
   function step(){
+    if(netMode === 'spectator'){ return; } // spectator: state comes from host snapshots
     if(netMode){
       // Online: the rollback engine drives the simulation (send input, predict
       // the opponent, advance one frame or stall, re-sim on misprediction).
@@ -2019,7 +2128,14 @@
       n++;
     }
     if(n >= 5) _accum = 0; // couldn't keep up; drop the backlog
-    if(netMode) presentNet(); // mirror the simulated state to the DOM once per frame
+    if(netMode === 'spectator'){ presentSpec(); }
+    else if(netMode){ presentNet(); } // mirror the simulated state to the DOM once per frame
+    // Host: stream the match to spectators (~30Hz) whenever any are watching.
+    if(netMode === 'host' && specCount > 0 && (++_specFrame % 2 === 0)){
+      netSend({type:'spec-state', a:scores.p1, b:scores.p2, sv:server, st:state,
+        p1x:Math.round(p1.x), p1y:Math.round(p1.y), p2x:Math.round(p2.x), p2y:Math.round(p2.y),
+        bx:Math.round(ball.x), by:Math.round(ball.y), bsp:ball.spiked?1:0});
+    }
     // Dim the on-screen menu/chat/music icons during active play — but NOT while
     // paused, so the menu is fully visible/usable when the game is paused.
     var _dim = (state === 'play' && !userPaused);
@@ -2433,6 +2549,10 @@
   document.getElementById('joinbtn').addEventListener('click', function(){
     var code = document.getElementById('codeinput').value.toUpperCase().trim();
     lobbyStatus('Connecting...'); netJoin(code);
+  });
+  document.getElementById('spectatebtn').addEventListener('click', function(){
+    var code = document.getElementById('codeinput').value.toUpperCase().trim();
+    lobbyStatus('Connecting...'); netSpectate(code);
   });
   document.getElementById('codeinput').addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ document.getElementById('joinbtn').click(); }

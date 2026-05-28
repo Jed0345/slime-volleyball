@@ -72,6 +72,12 @@ server.on("connection", (socket) => { socket.setNoDelay(true); });
 function send(ws, obj) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
 }
+function closeSpectators(room) {
+  if (room && room.spectators) {
+    room.spectators.forEach((s) => send(s, { type: "spec-ended" }));
+    room.spectators = [];
+  }
+}
 function otherPeer(room, ws) {
   if (!room) return null;
   return room.host === ws ? room.guest : room.host;
@@ -104,7 +110,7 @@ wss.on("connection", (ws) => {
         send(ws, { type: "error", reason: "Room code already in use." });
         return;
       }
-      rooms.set(code, { host: ws, guest: null, graceTimer: null });
+      rooms.set(code, { host: ws, guest: null, graceTimer: null, spectators: [] });
       ws.roomCode = code;
       ws.role = "host";
       send(ws, { type: "created", code });
@@ -136,6 +142,7 @@ wss.on("connection", (ws) => {
         const peer = otherPeer(room, ws);
         if (peer) send(peer, { type: "peer-left" });
         if (room.graceTimer) clearTimeout(room.graceTimer);
+        closeSpectators(room);
         rooms.delete(ws.roomCode);
       }
       ws.roomCode = null;
@@ -164,8 +171,25 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Spectate: watch an existing room without taking a player slot.
+    if (msg.type === "spectate") {
+      const room = rooms.get(msg.code);
+      if (!room || !room.host) { send(ws, { type: "error", reason: "No game found with that code." }); return; }
+      room.spectators = room.spectators || [];
+      room.spectators.push(ws);
+      ws.roomCode = msg.code;
+      ws.role = "spectator";
+      send(ws, { type: "spectating", code: msg.code });
+      send(room.host, { type: "spec-count", n: room.spectators.length });
+      return;
+    }
+
     // In-game relay: forward everything else to the other peer.
     const room = rooms.get(ws.roomCode);
+    if (msg.type === "spec-state") {
+      if (room && room.spectators) room.spectators.forEach((sp) => send(sp, msg));
+      return;
+    }
     const peer = otherPeer(room, ws);
     if (peer) send(peer, msg);
   });
@@ -174,6 +198,11 @@ wss.on("connection", (ws) => {
     const code = ws.roomCode;
     const room = rooms.get(code);
     if (!room) return;
+    if (ws.role === "spectator") {
+      room.spectators = (room.spectators || []).filter((sp) => sp !== ws);
+      if (room.host) send(room.host, { type: "spec-count", n: room.spectators.length });
+      return;
+    }
     const peer = otherPeer(room, ws);
     // Free this player's slot but keep the room briefly so they can rejoin
     // after a refresh without kicking the opponent out.
@@ -181,6 +210,7 @@ wss.on("connection", (ws) => {
     else if (room.guest === ws) room.guest = null;
     if (!room.host && !room.guest) {
       if (room.graceTimer) clearTimeout(room.graceTimer);
+      closeSpectators(room);
       rooms.delete(code);
       return;
     }
@@ -192,6 +222,7 @@ wss.on("connection", (ws) => {
       const remaining = r.host || r.guest;
       if (remaining) send(remaining, { type: "peer-left" });
       clearTimeout(r.graceTimer);
+      closeSpectators(r);
       rooms.delete(code);
     }, 15000);
   });
