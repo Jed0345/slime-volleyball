@@ -494,6 +494,10 @@
     // Rollback re-simulates frames silently; presentNet() reflects the state to
     // the DOM once per render, so skip all side-effects during replay.
     if(simReplaying) return;
+    // Host is the score authority — emit canonical scores at the moment of
+    // truth so the guest snaps back if their sim diverged on this point.
+    // (The periodic heartbeat in rbTick is a safety net; this is the fast path.)
+    if(netMode === 'host'){ netSend({type:'score-sync', a:scores.p1, b:scores.p2, sv:server}); }
     updateScore();
     if(state === 'gameover'){
       var label = (who==='p1') ? 'BLUE<br>WINS!' : (twoPlayer ? 'PINK<br>WINS!' : nameFor(who)+'<br>WINS');
@@ -1624,10 +1628,16 @@
                           // reaches the peer before they need it (fewer rollbacks)
   var MAX_ROLLBACK = 10;  // never predict more than this many frames past the last
                           // confirmed remote input — stall instead, to bound replay
-  var INPUT_REDUNDANCY = 8; // resend this many recent frames in every packet, so a
-                            // dropped packet on the unreliable channel is backfilled
-                            // by the next one (rollback can't fix an input that never
-                            // arrives). Inputs are 1 byte each, so this stays tiny.
+  var INPUT_REDUNDANCY = 60; // resend this many recent frames in every packet, so a
+                             // dropped packet on the unreliable channel is backfilled
+                             // by the next one (rollback can't fix an input that never
+                             // arrives). Inputs are 1 byte each, so this stays tiny.
+                             // 60 = ~1 second of redundancy — wider than the worst-case
+                             // skew between the WS relay (gamemode/rematch/score-sync,
+                             // ordered+reliable, ~50-200ms via Fly) and the RTC channel
+                             // (inputs, unordered+unreliable, ~10-100ms P2P). With 8 we
+                             // saw desyncs when a restart trigger arrived later than
+                             // the new-sim inputs that were sent right after it.
 
   var NOINPUT = {left:false, right:false, jump:false, spike:false};
   function sampleLocalInput(){
@@ -1731,6 +1741,13 @@
       var cutoff = rb.frame - 60;
       for(var k in rb.saved){ if((k|0) < cutoff){ delete rb.saved[k]; delete rb.used[k]; delete rb.local[k]; delete rb.remote[k]; } }
     }
+    // Score-sync heartbeat (host -> guest, 1 Hz). Catches drift from non-determinism
+    // or permanent input loss that the moment-of-score sync didn't see. Guest snaps
+    // to these values if its local scores differ. State is recomputed from scores
+    // by rbResync so we don't need to send it.
+    if(netMode === 'host' && rb.frame % 60 === 0){
+      netSend({type:'score-sync', a:scores.p1, b:scores.p2, sv:server});
+    }
   }
   // A peer input packet arrived (a redundant window of frames). Store any frames
   // we don't already have; if any newly-confirmed frame contradicts a prediction
@@ -1739,9 +1756,15 @@
   function rbOnRemoteInput(m){
     if(!rb || !m.n) return;
     var end = m.f|0, arr = m.n, earliest = -1;
+    // Anything past `sane` is from a previous session (e.g. a rematch/mode-change
+    // landed at frame 0 but a packet for the old rally's frame 4500 is still in
+    // flight). Drop those — otherwise they'd lock lastRemoteFrame to a huge
+    // number and lastRemoteInput to a stale value, poisoning prediction until
+    // the new sim ticked past the orphan frame (~75 seconds).
+    var sane = rb.frame + 120;
     for(var i=0; i<arr.length; i++){
       var fr = end - (arr.length - 1) + i;
-      if(fr < 0 || rb.remote[fr]) continue; // out of range or already confirmed
+      if(fr < 0 || fr > sane || rb.remote[fr]) continue; // out of range or already confirmed
       var bits = arr[i]|0;
       var inp = {left:!!(bits&1), right:!!(bits&2), jump:!!(bits&4), spike:!!(bits&8)};
       rb.remote[fr] = inp;
@@ -2009,6 +2032,16 @@
     if(m.type === 'in'){ rbOnRemoteInput(m); return; }
     // Reconnect handshake: adopt the authoritative score and restart the sim.
     if(m.type === 'resync'){ rbResync(m.a, m.b, m.sv); return; }
+    // Host is authoritative for scores. If our local sim drifted (lost input,
+    // floating-point divergence) and we disagree, snap to the host's values via
+    // rbResync — same machinery as a reconnect. The in-flight rally is lost,
+    // which is fine: it had already gone wrong silently before we noticed.
+    if(m.type === 'score-sync'){
+      if(netMode === 'guest' && (m.a !== scores.p1 || m.b !== scores.p2 || m.sv !== server)){
+        rbResync(m.a|0, m.b|0, (m.sv === 'p2') ? 'p2' : 'p1');
+      }
+      return;
+    }
   }
   // =================== END NETWORKING ===================
 
