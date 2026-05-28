@@ -42,7 +42,7 @@
 
   /* Top navbar: white-slime logo on the left, Discord CTA on the right. */
   #navbar{
-    width:100%; max-width:750px;   /* match the game width, centered by the body */
+    width:100%; max-width:900px;   /* match the game width, centered by the body */
     display:flex; align-items:center; justify-content:space-between; gap:12px;
     padding:8px;
   }
@@ -248,7 +248,7 @@
   #cat-mode > button{ align-self:flex-end; }        /* right-align the non-field ones (Win/Restart) to match */
   #cat-stage button{ max-width:250px; }
   /* TEMP: menu bar shown as a centred row below the game; gear + chat hidden. */
-  #menu-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; width:100%; max-width:750px; margin:0 auto; }
+  #menu-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; width:100%; max-width:900px; margin:0 auto; }
   #menu-bar.below-game{ position:static; left:auto; bottom:auto; height:auto; display:flex !important; flex-wrap:wrap; align-items:center; gap:6px; }
   #menu-btn, #chat-btn{ display:none !important; }
   #court > #volctl{ bottom:10px; background:rgba(20,24,36,0.9); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
@@ -308,7 +308,7 @@
   #app{ width:100%; display:flex; flex-direction:column; align-items:center; gap:12px; }
   #app-main{ width:100%; display:flex; flex-direction:column; align-items:center; gap:12px; min-width:0; }
 
-  #stage{ position:relative; width:100%; max-width:750px; }
+  #stage{ position:relative; width:100%; max-width:900px; }
   /* Positioning context for the court overlays (msg, rematch, ping, pixi). */
   #court{ position:relative; width:100%; }
   #game{ width:100%; display:block; border-radius:12px; }
@@ -395,10 +395,10 @@
 
   #controls{
     display:flex; align-items:center; justify-content:space-between; gap:12px;
-    width:100%; max-width:750px; flex-wrap:wrap;
+    width:100%; max-width:900px; flex-wrap:wrap;
   }
   #controlhint{ font-size:13px; color:var(--text-secondary); }
-  #hint-row{ display:flex; flex-direction:row; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px 16px; width:100%; max-width:750px; margin:2px auto 0; }
+  #hint-row{ display:flex; flex-direction:row; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:6px 16px; width:100%; max-width:900px; margin:2px auto 0; }
   #controlhint-ui, #powerhint-ui{ font-size:13px; color:var(--text-secondary); text-align:center; }
   #powerhint{ font-size:13px; color:var(--text-secondary); }
   #btns{ display:flex; gap:8px; flex-wrap:wrap; }
@@ -415,7 +415,7 @@
 
   /* The container ignores touches in its empty areas (so faded/empty space never
      blocks the court); only the interactive controls below opt back in. */
-  #touchpad{ display:none; width:100%; max-width:750px; position:relative; pointer-events:none; }
+  #touchpad{ display:none; width:100%; max-width:900px; position:relative; pointer-events:none; }
   /* Pinned to the bottom of the viewport on any touch device so the player can
      always reach the controls without scrolling. (.show is only added on touch.) */
   #touchpad.show{
@@ -494,7 +494,7 @@
 
   #chat{
     position:relative;
-    width:100%; max-width:750px; display:flex; flex-direction:column; gap:8px;
+    width:100%; max-width:900px; display:flex; flex-direction:column; gap:8px;
     border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,0.15);
     padding:12px;
   }
@@ -576,15 +576,9 @@
      the centered game, so the gap between them stays small and constant at any
      width. To resize the panel, change --chat-frac only — the reserved gutter and
      the anchor position both derive from it. */
-  /* 15% page scale-up. Applied to the game column (#app) and the chat panel
-     individually rather than to <body>, because body zoom breaks the chat
-     side-panel's viewport-relative positioning math (the padding-right gutter
-     gets visually wider than the chat-gutter calc assumes). */
-  #app, #chat{ zoom: 1.15; }
-
   @media (min-width:1100px){
     :root{
-      --game-w: 862.5px;                                     /* 750 * 1.15 — tracks #app's zoomed display width */
+      --game-w: 900px;                                       /* the game's width (CSS display size; canvas internal stays 750) */
       --chat-frac: 0.50;                                     /* panel width = frac × game width */
       --chat-w: calc(var(--game-w) * var(--chat-frac));
       --chat-gap: 16px;                                      /* gap between game and panel */
@@ -615,7 +609,7 @@
   #stage:not([data-filter="off"]) #game{ visibility:hidden; }
 
   #skinpickers{
-    width:100%; max-width:750px;
+    width:100%; max-width:900px;
     display:flex; flex-direction:column; gap:10px;
     border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,0.15);
     padding:12px;
@@ -717,7 +711,7 @@
   }
 
   #version{
-    width:100%; max-width:750px;
+    width:100%; max-width:900px;
     margin-top:4px; padding-top:18px; padding-bottom:18px;
     display:flex; align-items:center; justify-content:space-between;
     border-top:1px solid rgba(255,255,255,0.12);
@@ -902,7 +896,7 @@
     </div>
   </div>
 
-  <div id="lobby" style="display:none; width:100%; max-width:750px; margin:0 auto; border-radius:12px; background:rgba(0,0,0,0.15);">
+  <div id="lobby" style="display:none; width:100%; max-width:900px; margin:0 auto; border-radius:12px; background:rgba(0,0,0,0.15);">
     <div id="lobbyhome" style="display:flex; flex-direction:column; gap:10px; align-items:stretch;">
       <div class="lobby-row">
         <label style="color:var(--text-secondary); display:inline-flex; align-items:center; gap:6px;">
@@ -991,7 +985,7 @@
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
   <footer id="version">
-    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v0.25.0</span>
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v0.25.1</span>
     <span id="footer-social">
       <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
       <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
