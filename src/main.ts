@@ -1014,7 +1014,7 @@
     ctx.fillStyle = outline;
     ctx.beginPath(); ctx.arc(ex+Math.cos(ang)*er*0.45, ey+Math.sin(ang)*er*0.45, pr, 0, Math.PI*2); ctx.fill();
     // Match point (Power Slime): glowing red light trail + occasional sparks.
-    if(gameMode === 'power' && ((s === p1 && scores.p1 === WIN - 1) || (s === p2 && scores.p2 === WIN - 1))){
+    if(false && gameMode === 'power' && ((s === p1 && scores.p1 === WIN - 1) || (s === p2 && scores.p2 === WIN - 1))){
       drawZoneFx(s, ex, ey, er);
     } else if(s.zoneTrail){ s.zoneTrail = null; s.zoneSparks = null; }
     // The White Slime wears shades (shades.svg): scaled to the slime, centred
@@ -1278,7 +1278,7 @@
     if(counterSeq > _lastCounterShown) showCounteredPop();
     // "You're in the zone" — announced once when a Power-Slime player hits match point.
     var _myScore = (netMode === 'guest') ? scores.p2 : (twoPlayer ? Math.max(scores.p1, scores.p2) : scores.p1);
-    var _atZone = (gameMode === 'power') && netMode !== 'spectator' && (_myScore === WIN - 1);
+    var _atZone = false && (gameMode === 'power') && netMode !== 'spectator' && (_myScore === WIN - 1);
     if(_atZone && !_zoneShown){ _zoneShown = true; showZonePop(); }
     else if(!_atZone){ _zoneShown = false; }
     _lastCounterShown = counterSeq;
