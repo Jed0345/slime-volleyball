@@ -86,6 +86,11 @@ function otherPeer(room, ws) {
 wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.role = null;
+  // Heartbeat: edge proxies (Fly, Cloudflare, mobile carriers) drop idle
+  // WebSockets after ~60s. Mark alive on every pong; the sweep below pings
+  // every 25s and terminates anything that didn't pong since the last sweep.
+  ws.isAlive = true;
+  ws.on("pong", () => { ws.isAlive = true; });
 
   ws.on("message", (data) => {
     let msg;
@@ -227,6 +232,22 @@ wss.on("connection", (ws) => {
     }, 15000);
   });
 });
+
+// Periodic heartbeat sweep — keeps connections warm through idle-killing
+// proxies and evicts dead sockets (closed browser tabs without a clean
+// close handshake, suspended laptops, etc).
+const HEARTBEAT_MS = 25_000;
+const heartbeat = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      try { ws.terminate(); } catch (e) {}
+      return;
+    }
+    ws.isAlive = false;
+    try { ws.ping(); } catch (e) {}
+  });
+}, HEARTBEAT_MS);
+wss.on("close", () => clearInterval(heartbeat));
 
 server.listen(PORT, () => {
   console.log("Slime Volleyball 2 running at http://localhost:" + PORT);

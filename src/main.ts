@@ -1431,7 +1431,15 @@
       lobbyStatus('Could not connect to server.');
       return;
     }
-    ws.onopen = function(){ if(onOpen) onOpen(); };
+    ws.onopen = function(){
+      // Start the app-level ping as soon as the socket is up, not just after a
+      // match begins. Keeps the connection warm through idle-killing proxies
+      // (Fly/Cloudflare/mobile carriers drop idle WS after ~60s) and also gives
+      // background tabs at least some traffic so they're less likely to be
+      // throttled into silence.
+      startPing();
+      if(onOpen) onOpen();
+    };
     ws.onmessage = netOnMessage;
     ws.onerror = function(){ lobbyStatus('Connection error. Is the server running?'); };
     ws.onclose = function(){
