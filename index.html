@@ -27,10 +27,6 @@
   }
   *{ box-sizing:border-box; }
   body{
-    /* Uniform 15% scale-up. `zoom` is the modern, layout-aware way to do this
-       (re-flows children, unlike `transform: scale()` which leaves a hole).
-       Supported in all current browsers (it's in the CSS Zoom spec). */
-    zoom: 1.15;
     margin:0; min-height:100vh; color:#e8ecf4;
     /* Dot pattern tiled over the base background colour (the PNG is transparent,
        so --bg shows through the gaps). The 25%-opaque --bg layer on top dims the
@@ -454,19 +450,28 @@
   #joyopacity-eye.off{ opacity:0.2; }
   #joyopacity-eye .eye-slash{ display:none; }
   #joyopacity-eye.off .eye-slash{ display:inline; }
-  #joystick-base{
-    position:relative; width:130px; height:130px; border-radius:50%;
-    background:rgba(0,0,0,0.25); border:2px solid #3a4150;
-    touch-action:none; flex-shrink:0; pointer-events:auto;
+  /* D-pad replaces the analog joystick. The two buttons share a single touch
+     handler so the player can SLIDE from one to the other without lifting —
+     the key currently held flips as the touch crosses the gap. Better UX than
+     two independent buttons (no lift-and-re-press to change direction). */
+  #dpad{
+    display:flex; gap:14px; flex-shrink:0;
+    touch-action:none; pointer-events:auto;
+    user-select:none; -webkit-user-select:none;
   }
-  #joystick-knob{
-    position:absolute; left:50%; top:50%;
-    width:58px; height:58px; border-radius:50%;
-    background:rgba(255,255,255,0.55); border:2px solid #e8ecf4;
-    transform:translate(-50%, -50%); pointer-events:none;
-    transition:background .1s;
+  #btn-left, #btn-right{
+    width:96px; height:96px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:34px; line-height:1;
+    background:rgba(0,0,0,0.25); border:2px solid #e8ecf4;
+    color:#e8ecf4;
+    pointer-events:none;   /* parent #dpad owns the events; buttons are visual only */
+    user-select:none; -webkit-user-select:none;
+    transition:background .08s, color .08s;
   }
-  #joystick-base.active #joystick-knob{ background:rgba(255,255,255,0.75); }
+  #btn-left.active, #btn-right.active{
+    background:rgba(255,255,255,0.55); color:#1a1f2e;
+  }
   /* White/gray to match the joystick: gray translucent base, white border + text,
      filling white on press like the knob does when active. */
   #joystick-jump{
@@ -571,9 +576,15 @@
      the centered game, so the gap between them stays small and constant at any
      width. To resize the panel, change --chat-frac only — the reserved gutter and
      the anchor position both derive from it. */
+  /* 15% page scale-up. Applied to the game column (#app) and the chat panel
+     individually rather than to <body>, because body zoom breaks the chat
+     side-panel's viewport-relative positioning math (the padding-right gutter
+     gets visually wider than the chat-gutter calc assumes). */
+  #app, #chat{ zoom: 1.15; }
+
   @media (min-width:1100px){
     :root{
-      --game-w: 750px;                                       /* the game's width */
+      --game-w: 862.5px;                                     /* 750 * 1.15 — tracks #app's zoomed display width */
       --chat-frac: 0.50;                                     /* panel width = frac × game width */
       --chat-w: calc(var(--game-w) * var(--chat-frac));
       --chat-gap: 16px;                                      /* gap between game and panel */
@@ -965,8 +976,9 @@
     <span id="joyopacity-eye" role="button" tabindex="0" aria-label="Hide controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/><line class="eye-slash" x1="3" y1="3" x2="21" y2="21"/></svg></span>
     <input id="joyopacity" type="range" min="10" max="100" step="5" value="100" aria-label="Controls opacity">
     <div id="touchpad-joystick">
-      <div id="joystick-base" aria-label="Joystick">
-        <div id="joystick-knob"></div>
+      <div id="dpad" aria-label="Movement">
+        <button id="btn-left" aria-label="Left">&#9664;</button>
+        <button id="btn-right" aria-label="Right">&#9654;</button>
       </div>
       <div id="action-buttons">
         <button id="joystick-spike" aria-label="Spike" style="display:none;">SPIKE</button>
@@ -979,7 +991,7 @@
   <audio id="bgmusic" loop preload="none" src="BGM-1.mp3"></audio>
 
   <footer id="version">
-    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.24.3</span>
+    <span id="version-text">Slime Volleyball 2<span class="footer-sep" aria-hidden="true"></span>v1.25.0</span>
     <span id="footer-social">
       <a id="discord-link" class="footer-icon" href="https://discord.gg/CSupRtePS" target="_blank" rel="noopener" aria-label="Join our Discord">
       <svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>

@@ -2266,59 +2266,56 @@
   bindHold('joystick-jump','w');
   bindHold('joystick-spike','s');
 
-  // Virtual joystick: drag the knob, push past a deadzone left/right to engage
-  // the corresponding movement key. Vertical axis is ignored (jump uses the
-  // dedicated button so a jump can be tapped while the slime is mid-move).
-  (function setupJoystick(){
-    var base = document.getElementById('joystick-base');
-    var knob = document.getElementById('joystick-knob');
+  // D-pad: two arrow buttons sharing a single touch handler. The player can
+  // press one button and then SLIDE their thumb across to the other without
+  // lifting — the engaged direction flips as the touch crosses the gap. The
+  // buttons themselves have pointer-events:none in CSS; #dpad owns events.
+  // Mouse fallback works the same way for desktop testing.
+  (function setupDpad(){
+    var dpad  = document.getElementById('dpad');
+    var left  = document.getElementById('btn-left');
+    var right = document.getElementById('btn-right');
     var activeTouchId = null;
     var usingMouse = false;
-    function applyOffset(x, y){
-      var r = base.offsetWidth / 2;
-      var maxR = r - 14;
-      // Locked to the horizontal axis: only left/right matters, so the knob
-      // slides along x and stays vertically centered (vertical drag is ignored).
-      if(x > maxR) x = maxR;
-      else if(x < -maxR) x = -maxR;
-      knob.style.transform = 'translate(calc(-50% + ' + x + 'px), -50%)';
-      var dead = r * 0.22;
-      keys['a'] = x < -dead;
-      keys['d'] = x > dead;
+    function pressedAt(cx, cy){
+      function inside(el){
+        var r = el.getBoundingClientRect();
+        return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+      }
+      var l = inside(left), r = inside(right);
+      if(l && r) r = false; // overlap guard (shouldn't happen at default sizes)
+      keys['a'] = l;
+      keys['d'] = r;
+      left.classList.toggle('active', l);
+      right.classList.toggle('active', r);
+      if(l || r) tryServe();
     }
     function release(){
-      knob.style.transform = '';
       keys['a'] = false; keys['d'] = false;
-      base.classList.remove('active');
+      left.classList.remove('active');
+      right.classList.remove('active');
       activeTouchId = null;
       usingMouse = false;
     }
-    function pointFromEvent(clientX, clientY){
-      var rect = base.getBoundingClientRect();
-      return { x: clientX - rect.left - rect.width/2, y: clientY - rect.top - rect.height/2 };
-    }
-    base.addEventListener('touchstart', function(e){
+    dpad.addEventListener('touchstart', function(e){
       e.preventDefault();
       if(activeTouchId !== null) return;
       var t = e.changedTouches[0];
       activeTouchId = t.identifier;
-      base.classList.add('active');
-      var p = pointFromEvent(t.clientX, t.clientY);
-      applyOffset(p.x, p.y);
+      pressedAt(t.clientX, t.clientY);
     }, {passive:false});
-    base.addEventListener('touchmove', function(e){
+    dpad.addEventListener('touchmove', function(e){
       if(activeTouchId === null) return;
       for(var i=0; i<e.changedTouches.length; i++){
         var t = e.changedTouches[i];
         if(t.identifier === activeTouchId){
           e.preventDefault();
-          var p = pointFromEvent(t.clientX, t.clientY);
-          applyOffset(p.x, p.y);
+          pressedAt(t.clientX, t.clientY);
           break;
         }
       }
     }, {passive:false});
-    function onTouchEnd(e){
+    function onEnd(e){
       if(activeTouchId === null) return;
       for(var i=0; i<e.changedTouches.length; i++){
         if(e.changedTouches[i].identifier === activeTouchId){
@@ -2328,16 +2325,16 @@
         }
       }
     }
-    base.addEventListener('touchend', onTouchEnd, {passive:false});
-    base.addEventListener('touchcancel', onTouchEnd, {passive:false});
-    // Mouse fallback so the joystick is usable on a desktop browser with devtools.
-    base.addEventListener('mousedown', function(e){
-      e.preventDefault(); usingMouse = true; base.classList.add('active');
-      var p = pointFromEvent(e.clientX, e.clientY); applyOffset(p.x, p.y);
+    dpad.addEventListener('touchend', onEnd, {passive:false});
+    dpad.addEventListener('touchcancel', onEnd, {passive:false});
+    // Mouse fallback for desktop devtools testing — same slide-aware semantics.
+    dpad.addEventListener('mousedown', function(e){
+      e.preventDefault(); usingMouse = true;
+      pressedAt(e.clientX, e.clientY);
     });
     window.addEventListener('mousemove', function(e){
       if(!usingMouse) return;
-      var p = pointFromEvent(e.clientX, e.clientY); applyOffset(p.x, p.y);
+      pressedAt(e.clientX, e.clientY);
     });
     window.addEventListener('mouseup', function(){ if(usingMouse) release(); });
   })();
