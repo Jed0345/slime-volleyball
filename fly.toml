@@ -1,33 +1,22 @@
-# Fly.io config for the Slime Volleyball 2 relay.
+# fly.toml app configuration file generated for slime-volleyball on 2026-05-28T03:18:49Z
 #
-# First-time setup:
-#   1. Install flyctl:   curl -L https://fly.io/install.sh | sh
-#   2. flyctl auth signup   (or `flyctl auth login` if you already have one)
-#   3. flyctl launch --copy-config --no-deploy
-#      - it will prompt for an app name (e.g. "slime-volleyball-relay")
-#        and overwrite the `app = ...` line below.
-#   4. flyctl deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# After that, every redeploy is just: `flyctl deploy`.
-#
-# `auto_stop_machines = "off"` + `min_machines_running = 1` keeps the
-# relay always warm — no 10-second cold start when the first player
-# clicks Create Game. The free tier covers one always-on shared-1x VM.
 
-app = "slime-volleyball"
-primary_region = "iad"          # us-east; change to "lhr"/"fra"/"syd"/etc. if your players are elsewhere
+app = 'slime-volleyball'
+primary_region = 'ewr'
 
 [build]
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = 'shared'
   cpus = 1
   memory_mb = 256
