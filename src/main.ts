@@ -1916,10 +1916,10 @@
     if(mode === 'idle'){ panel.style.display = 'none'; return; }
     panel.style.display = 'flex';
     ask.style.display = yes.style.display = no.style.display = 'none';
-    if(mode === 'offer'){       msg.textContent = 'PLAY AGAIN?';                 ask.style.display = ''; hint.textContent = 'Press R for rematch'; }
+    if(mode === 'offer'){       msg.textContent = 'PLAY AGAIN?';                 ask.style.display = ''; hint.textContent = 'Press any key for rematch'; }
     else if(mode === 'waiting'){ msg.textContent = 'WAITING FOR OPPONENT...';                            hint.textContent = ''; }
-    else if(mode === 'asked'){   msg.textContent = 'OPPONENT WANTS A REMATCH';   yes.style.display = ''; no.style.display = ''; hint.textContent = 'Press R to accept'; }
-    else if(mode === 'declined'){msg.textContent = 'OPPONENT DECLINED';          ask.style.display = ''; hint.textContent = 'Press R for rematch'; }
+    else if(mode === 'asked'){   msg.textContent = 'OPPONENT WANTS A REMATCH';   yes.style.display = ''; no.style.display = ''; hint.textContent = 'Press any key to accept'; }
+    else if(mode === 'declined'){msg.textContent = 'OPPONENT DECLINED';          ask.style.display = ''; hint.textContent = 'Press any key for rematch'; }
   }
   function hideRematch(){ setRematchUI('idle'); }
   function onEnterGameOver(){ if(netMode && rematchState === 'idle') setRematchUI('offer'); }
@@ -2061,7 +2061,8 @@
     if(e.key==='c' || e.key==='C'){ DEBUG_COUNTER_ZONES = !DEBUG_COUNTER_ZONES; } // toggle counter-zone debug overlay
     // R = request a rematch (online game over), or accept one the opponent offered.
     // requestRematch() internally accepts when we're in the 'asked' state.
-    if((e.key==='r' || e.key==='R') && netMode && rematchState !== 'idle'){ requestRematch(); }
+    // Online rematch: R, any arrow, or A/W/D/S requests it (or accepts the opponent's).
+    if(netMode && rematchState !== 'idle' && ['r','R','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','a','A','w','W','d','D','s','S'].indexOf(e.key) >= 0){ requestRematch(); }
   });
   window.addEventListener('keyup', function(e){
     if(isTypingTarget(e.target)) return;
