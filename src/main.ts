@@ -295,7 +295,7 @@
     server = 'p1';
     state = 'menu';
     advanceToNextBoss = false;
-    setWin(DEFAULT_WIN); // offline always plays to the default; also (re)renders the "FIRST TO N" label from WIN
+    setWin(twoPlayer ? hostWin : DEFAULT_WIN); // 1P always at DEFAULT_WIN; 2P respects the user's pick (persisted in hostWin)
     resetPositions(server);
     updateScore();
     updateLabels();
@@ -422,6 +422,15 @@
     if(p1ProfLbl) p1ProfLbl.textContent = local2P ? 'Blue Slime:' : 'Username:';
     fieldOf(document.getElementById('oppbtn')).style.display = twoPlayer ? 'none' : '';
     fieldOf(document.getElementById('resetbtn')).style.display = twoPlayer ? 'none' : ''; // Restart is a single-player action
+    // First-to-N picker: visible whenever the local player has the authority to
+    // choose — local 2-player, or online host. Hidden in single-player (always
+    // plays to DEFAULT_WIN) and for the online guest (follows the host).
+    var _winBtn = document.getElementById('winmodebtn');
+    if(_winBtn){
+      var _canPickWin = (netMode === 'host') || (twoPlayer && !netMode);
+      fieldOf(_winBtn).style.display = _canPickWin ? '' : 'none';
+      updateWinModeBtn();
+    }
     document.getElementById('oppbtn').textContent = curOpp().name;
     document.getElementById('modebtn').textContent = (twoPlayer ? 'Two Player' : 'Single Player');
     // Extra single-player hotkeys shown next to the movement keys.
@@ -1859,7 +1868,8 @@
     fieldOf(document.getElementById('resetbtn')).style.display = 'none';
     setLobbyCreating(true); // connected: Leave (red) in place of Create, Join hidden
     // Only the host can pick the points-to-win; the guest follows via 'config'.
-    document.getElementById('winmodebtn').style.display = asHost ? '' : 'none';
+    // (updateLabels() — called from init/skin paths — keeps this consistent.)
+    fieldOf(document.getElementById('winmodebtn')).style.display = asHost ? '' : 'none';
     updateWinModeBtn();
     netPaused = false;
     setControlHint(asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
@@ -2557,16 +2567,19 @@
     }
   });
   updateGameModeUI(); // reflect the persisted/default ruleset on load
-  // Online host: cycle the points-to-win. setWin() rebuilds the dot row + "FIRST
-  // TO N" label, and the 'config' message makes the guest do the same.
+  // Cycle the points-to-win. Allowed for whoever has authority over the match:
+  // the online host or a local 2-player session. Single-player always plays to
+  // DEFAULT_WIN; the online guest follows the host (via 'config'). setWin()
+  // rebuilds the dot row + "FIRST TO N" label.
   document.getElementById('winmodebtn').addEventListener('click', function(){
-    if(netMode !== 'host') return; // only the host sets the mode
+    var allowed = (netMode === 'host') || (twoPlayer && !netMode);
+    if(!allowed) return;
     var idx = WIN_OPTIONS.indexOf(WIN);
     var next = WIN_OPTIONS[(idx + 1) % WIN_OPTIONS.length];
-    hostWin = next;
+    hostWin = next;            // persists across init() (see init's 2P branch)
     setWin(next);              // updates WIN, the dots, and the FIRST TO label
     updateWinModeBtn();
-    netSend({type:'config', win: next}); // guest adopts it → its dot count updates too
+    if(netMode === 'host') netSend({type:'config', win: next}); // guest adopts it → its dot count updates too
   });
 
   // Lobby wiring
