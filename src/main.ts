@@ -2623,7 +2623,10 @@
     var btn = document.getElementById('touchctrlbtn');
     if(btn) btn.textContent = 'Controls: ' + (touchControl === 'joystick' ? 'Joystick' : 'Arrows');
     var quick = document.getElementById('touchctrl-quick');
-    if(quick) quick.title = touchControl === 'joystick' ? 'Switch to Arrows' : 'Switch to Joystick';
+    if(quick){
+      quick.textContent = touchControl === 'joystick' ? 'Joystick' : 'Arrows';
+      quick.title = touchControl === 'joystick' ? 'Switch to Arrows' : 'Switch to Joystick';
+    }
     // Clear analog state when switching away from joystick so a leftover finger
     // position doesn't keep the slime drifting.
     if(touchControl !== 'joystick'){ joyAxis = 0; joyActive = false; }
