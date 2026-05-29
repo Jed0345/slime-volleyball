@@ -86,11 +86,13 @@ function otherPeer(room, ws) {
 wss.on("connection", (ws) => {
   ws.roomCode = null;
   ws.role = null;
-  // Heartbeat: edge proxies (Fly, Cloudflare, mobile carriers) drop idle
-  // WebSockets after ~60s. Mark alive on every pong; the sweep below pings
-  // every 25s and terminates anything that didn't pong since the last sweep.
-  ws.isAlive = true;
-  ws.on("pong", () => { ws.isAlive = true; });
+  // Heartbeat: edge proxies (Railway/Cloudflare/mobile carriers) drop idle
+  // WebSockets after ~60s. Per-connection counter of consecutive missed pongs;
+  // the sweep below pings every 25s, increments missed, and only terminates
+  // when missed >= MAX_MISSED. A pong resets it to 0. Two cycles of grace
+  // means a lossy client gets one extra ping to recover before being booted.
+  ws.missed = 0;
+  ws.on("pong", () => { ws.missed = 0; });
 
   ws.on("message", (data) => {
     let msg;
@@ -237,13 +239,14 @@ wss.on("connection", (ws) => {
 // proxies and evicts dead sockets (closed browser tabs without a clean
 // close handshake, suspended laptops, etc).
 const HEARTBEAT_MS = 25_000;
+const MAX_MISSED   = 2;   // require N consecutive missed pongs before terminating
 const heartbeat = setInterval(() => {
   wss.clients.forEach((ws) => {
-    if (ws.isAlive === false) {
+    if (ws.missed >= MAX_MISSED) {
       try { ws.terminate(); } catch (e) {}
       return;
     }
-    ws.isAlive = false;
+    ws.missed = (ws.missed || 0) + 1;   // bump the counter; pong handler resets it to 0
     try { ws.ping(); } catch (e) {}
   });
 }, HEARTBEAT_MS);

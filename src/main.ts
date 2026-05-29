@@ -161,6 +161,12 @@
   // Networking state: netMode is 'host', 'guest', or null (offline).
   var netMode = null;
   var hosting = false; // created/connected a room: Leave (red) replaces Create in the lobby
+  // UI privileges: who picks the stage, ball skin, rules, mode, win condition.
+  // Defaults to the connection-host (asHost) but is independent of netMode so
+  // it can be transferred mid-match via "Make new host" without disrupting the
+  // sim (score-sync, spectator broadcast, rb roles all still flow through the
+  // unchanged netMode).
+  var hostPriv = false;
   var specCount = 0;     // host: how many spectators are watching
   var specTarget = null; // spectator: latest received state snapshot
   var _specFrame = 0;
@@ -376,6 +382,13 @@
     var b = document.getElementById('winmodebtn');
     if(b) b.textContent = 'Mode: First to ' + WIN;
   }
+  // "Make new host" — visible only in online play AND only to the current
+  // host-priv holder. Idempotent; safe to call from anywhere on state change.
+  function updateMakeHostBtn(){
+    var btn = document.getElementById('chat-makehost');
+    if(!btn) return;
+    btn.style.display = (netMode && hostPriv) ? '' : 'none';
+  }
   // Set the points-to-win, rebuild the dot row, and refresh the "FIRST TO N"
   // label. Used offline (default) and online (host's choice, synced to guest).
   function setWin(n){
@@ -432,14 +445,23 @@
     if(p1ProfLbl) p1ProfLbl.textContent = local2P ? 'Blue Slime:' : 'Username:';
     fieldOf(document.getElementById('oppbtn')).style.display = twoPlayer ? 'none' : '';
     fieldOf(document.getElementById('resetbtn')).style.display = twoPlayer ? 'none' : ''; // Restart is a single-player action
-    // First-to-N picker: visible whenever the local player has the authority to
-    // choose — local 2-player, or online host. Hidden in single-player (always
-    // plays to DEFAULT_WIN) and for the online guest (follows the host).
+    // Host-privilege-gated controls. In online play, visibility follows
+    // hostPriv (so it transfers cleanly via "Make new host"). Offline these
+    // depend on twoPlayer (winmodebtn) or are always visible (gamemodebtn,
+    // themebtn). The ball-skin picker action is gated inside its handlers.
     var _winBtn = document.getElementById('winmodebtn');
     if(_winBtn){
-      var _canPickWin = (netMode === 'host') || (twoPlayer && !netMode);
+      var _canPickWin = (netMode ? hostPriv : (twoPlayer));
       fieldOf(_winBtn).style.display = _canPickWin ? '' : 'none';
       updateWinModeBtn();
+    }
+    var _gmBtn = document.getElementById('gamemodebtn');
+    if(_gmBtn){
+      fieldOf(_gmBtn).style.display = (netMode && !hostPriv) ? 'none' : '';
+    }
+    var _thBtn = document.getElementById('themebtn');
+    if(_thBtn){
+      fieldOf(_thBtn).style.display = (netMode && !hostPriv) ? 'none' : '';
     }
     document.getElementById('oppbtn').textContent = curOpp().name;
     document.getElementById('modebtn').textContent = (twoPlayer ? 'Two Player' : 'Single Player');
@@ -1938,6 +1960,8 @@
   // forward to the present. Order/duplicates don't matter — frames are keyed.
   function rbOnRemoteInput(m){
     if(!rb || !m.n) return;
+    // RTC input frames are also peer-heartbeats — record for silence detection.
+    lastPeerMsgT = nowMs();
     var end = m.f|0, arr = m.n, earliest = -1;
     // Anything past `sane` is from a previous session (e.g. a rematch/mode-change
     // landed at frame 0 but a packet for the old rally's frame 4500 is still in
@@ -1997,20 +2021,38 @@
   // Reflect the simulated state to the DOM once per render frame (the sim itself
   // is side-effect-free so rollback can replay it silently). Only updates the
   // scoreboard / message overlay when something actually changed.
-  var _presSt = '', _presA = -1, _presB = -1, _presSv = '';
+  var _presSt = '', _presA = -1, _presB = -1, _presSv = '', _presSilent = false;
+  // Wall-clock timestamp of the last packet received from the peer (WS or RTC).
+  // Used to detect "real" silence — a connection that's still nominally open
+  // but isn't getting any traffic. Distinguishes a disconnect-in-progress from
+  // an opponent who's just slow to press serve. Reset when a match starts.
+  var lastPeerMsgT = 0;
+  // ms of peer silence after which we surface a "NOT RESPONDING" message
+  // instead of the ambiguous "WAITING FOR OPPONENT...". Tuned to be longer
+  // than the peer's expected ping interval (1Hz app ping + 60Hz RTC inputs).
+  var PEER_SILENT_MS = 5000;
   function presentNet(){
     if(!netMode || !rb) return;
     if(scores.p1 !== _presA || scores.p2 !== _presB){ updateScore(); _presA = scores.p1; _presB = scores.p2; }
     if(netPaused) return; // the 'peer-dropped' handler owns the message while paused
-    if(state === _presSt && server === _presSv) return;
-    _presSt = state; _presSv = server;
+    // Silence detection: if it's been > PEER_SILENT_MS since any peer packet,
+    // surface a "NOT RESPONDING" message instead of the ambiguous "WAITING…"
+    // copy. Only flags during 'point' (the in-rally 'play' state has rb-stall
+    // detection of its own; gameover is terminal).
     var mine = rb.side, myServe = (server === mine);
+    var silentNow = (state === 'point') && !myServe && (nowMs() - lastPeerMsgT > PEER_SILENT_MS);
+    if(state === _presSt && server === _presSv && silentNow === _presSilent) return;
+    _presSt = state; _presSv = server; _presSilent = silentNow;
     if(state === 'play'){
       hideRematch(); hideMsg();
     } else if(state === 'point'){
-      var sub = myServe ? 'PRESS SPACE OR TAP TO SERVE' : 'WAITING FOR OPPONENT...';
-      if(scores.p1 === 0 && scores.p2 === 0) setMsg('GET READY', sub);
-      else setMsg(myServe ? 'YOU SCORE' : 'OPPONENT SCORES', sub);
+      if(silentNow){
+        setMsg('OPPONENT NOT<br>RESPONDING', 'POSSIBLE CONNECTION ISSUE');
+      } else {
+        var sub = myServe ? 'PRESS SPACE OR TAP TO SERVE' : 'WAITING FOR OPPONENT...';
+        if(scores.p1 === 0 && scores.p2 === 0) setMsg('GET READY', sub);
+        else setMsg(myServe ? 'YOU SCORE' : 'OPPONENT SCORES', sub);
+      }
     } else if(state === 'gameover'){
       var iWon = (mine === 'p1') ? (scores.p1 >= WIN) : (scores.p2 >= WIN);
       setMsg(iWon ? 'YOU WIN!' : 'YOU LOSE', '');
@@ -2023,7 +2065,10 @@
     // Both sides set up identical fixed roles: host = blue (p1), guest = pink (p2).
     twoPlayer = false;
     netMode = asHost ? 'host' : 'guest';
+    hostPriv = asHost;       // connection host starts with all UI privileges
     oppIdx = 0;
+    lastPeerMsgT = nowMs();  // start the silence clock fresh on every match
+    _presSilent = false;
     // The host's chosen points-to-win drives the match; the guest receives it
     // via a 'config' message (sent below) and waits for it before its dots match.
     if(asHost) setWin(hostWin);
@@ -2038,13 +2083,15 @@
     document.getElementById('p2name').textContent = 'PINK';
     fieldOf(document.getElementById('oppbtn')).style.display = 'none';
     fieldOf(document.getElementById('modebtn')).style.display = 'none';
-    fieldOf(document.getElementById('gamemodebtn')).style.display = asHost ? '' : 'none'; // host can change the ruleset mid-match; guest follows
+    fieldOf(document.getElementById('gamemodebtn')).style.display = hostPriv ? '' : 'none'; // host-priv can change the ruleset mid-match
     fieldOf(document.getElementById('resetbtn')).style.display = 'none';
     setLobbyCreating(true); // connected: Leave (red) in place of Create, Join hidden
-    // Only the host can pick the points-to-win; the guest follows via 'config'.
-    // (updateLabels() — called from init/skin paths — keeps this consistent.)
-    fieldOf(document.getElementById('winmodebtn')).style.display = asHost ? '' : 'none';
+    // Only the host-priv holder can pick the points-to-win; the other follows via 'config'.
+    // (updateLabels() also re-evaluates this, so transfers stay consistent.)
+    fieldOf(document.getElementById('winmodebtn')).style.display = hostPriv ? '' : 'none';
+    fieldOf(document.getElementById('themebtn')).style.display = hostPriv ? '' : 'none';
     updateWinModeBtn();
+    updateMakeHostBtn();
     netPaused = false;
     setControlHint(asHost ? 'You are <b>BLUE</b> &middot; Move/jump: <b>A / W / D</b> or arrows'
                           : 'You are <b>PINK</b> &middot; Move/jump: <b>A / W / D</b> or arrows');
@@ -2123,6 +2170,9 @@
   // Shared dispatcher: messages arrive here from the WebSocket relay OR the
   // WebRTC DataChannel (gameplay inputs), so both transports are handled identically.
   function handleNetMessage(m){
+    // Any message from the peer counts as a heartbeat; record the time so
+    // presentNet can detect prolonged silence and surface a clearer message.
+    lastPeerMsgT = nowMs();
     // Latency: our probe came back — update our ping and tell the peer.
     if(m.type === 'pong'){
       var rtt = nowMs() - m.t;
@@ -2216,6 +2266,37 @@
       setWin(m.win); // guest adopts the host's points-to-win
       return;
     }
+    // Host-priv'd appearance changes pushed by the opponent.
+    if(m.type === 'stage' && typeof m.theme === 'string'){
+      if(THEMES.indexOf(m.theme) >= 0){
+        var wasBeachR = (theme === 'beach');
+        theme = m.theme;
+        try{ localStorage.setItem('slimeTheme', theme); }catch(e){}
+        applyTheme();
+        if(theme === 'beach') setFilterByKey('godray');
+        else if(wasBeachR && FILTERS[filterIdx].key === 'godray') setFilterByKey('off');
+      }
+      return;
+    }
+    if(m.type === 'filter' && typeof m.key === 'string'){
+      setFilterByKey(m.key);
+      return;
+    }
+    if(m.type === 'ballskin'){
+      if(typeof m.color === 'string') ballColor = m.color;
+      if(typeof m.boss  === 'string') ballSkin  = m.boss;
+      updateSkinControls('ball');
+      return;
+    }
+    // Host-privilege transfer. Symmetrical — we set hostPriv=true and the
+    // sender sets hostPriv=false locally before sending.
+    if(m.type === 'host-transfer'){
+      hostPriv = true;
+      updateLabels();
+      updateMakeHostBtn();
+      return;
+    }
+
     if(m.type === 'gamemode' && (m.mode === 'classic' || m.mode === 'power')){
       gameMode = m.mode;   // guest adopts the host's ruleset (Classic/Power)
       updateGameModeUI();  // sync the touch SPIKE button / power hint visibility
@@ -2831,12 +2912,16 @@
   // switches the active filter to God Rays; leaving beach (if God Rays were on)
   // switches back to Off, so the rays ride along with the beach scene.
   themeBtn.addEventListener('click', function(){
+    if(netMode && !hostPriv) return; // online: host-priv only
     var wasBeach = (theme === 'beach');
     theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; // cycle grassy -> city -> beach
     try{ localStorage.setItem('slimeTheme', theme); }catch(e){}
     applyTheme();
     if(theme === 'beach') setFilterByKey('godray');
     else if(wasBeach && FILTERS[filterIdx].key === 'godray') setFilterByKey('off');
+    // Force opponent to the same stage. setFilterByKey above may also have
+    // changed the filter — its own 'filter' broadcast handles that path.
+    if(netMode){ netSend({type:'stage', theme: theme}); }
   });
   document.getElementById('oppbtn').addEventListener('click', function(){
     oppIdx = (oppIdx+1)%OPPS.length;
@@ -2850,11 +2935,11 @@
   });
   // Ruleset toggle: Classic Slime (default) <-> Power Slime (spike enabled).
   document.getElementById('gamemodebtn').addEventListener('click', function(){
-    if(netMode === 'guest') return; // online: only the host sets the ruleset; the guest follows
+    if(netMode && !hostPriv) return; // online: only the host-priv holder sets the ruleset
     gameMode = (gameMode === 'power') ? 'classic' : 'power';
     try{ localStorage.setItem('slimeGameMode', gameMode); }catch(e){}
     updateGameModeUI();
-    if(netMode === 'host'){
+    if(netMode){
       // Connected match: gameMode is read live by the deterministic sim, so a
       // mid-rally change would desync. Sync the new ruleset and restart BOTH
       // rollback sims in lockstep (a fresh game under the new rules — scores reset).
@@ -2876,14 +2961,14 @@
   // DEFAULT_WIN; the online guest follows the host (via 'config'). setWin()
   // rebuilds the dot row + "FIRST TO N" label.
   document.getElementById('winmodebtn').addEventListener('click', function(){
-    var allowed = (netMode === 'host') || (twoPlayer && !netMode);
+    var allowed = (netMode ? hostPriv : twoPlayer);
     if(!allowed) return;
     var idx = WIN_OPTIONS.indexOf(WIN);
     var next = WIN_OPTIONS[(idx + 1) % WIN_OPTIONS.length];
     hostWin = next;            // persists across init() (see init's 2P branch)
     setWin(next);              // updates WIN, the dots, and the FIRST TO label
     updateWinModeBtn();
-    if(netMode === 'host') netSend({type:'config', win: next}); // guest adopts it → its dot count updates too
+    if(netMode) netSend({type:'config', win: next}); // opponent adopts it → its dot count updates too
   });
 
   // Lobby wiring
@@ -3224,9 +3309,11 @@
   }
   applyFilter();
   filterBtn.addEventListener('click', function(){
+    if(netMode && !hostPriv) return; // online: host-priv only
     filterIdx = (filterIdx + 1) % FILTERS.length;
     try{ localStorage.setItem('slimeFilter', FILTERS[filterIdx].key); }catch(e){}
     applyFilter();
+    if(netMode){ netSend({type:'filter', key: FILTERS[filterIdx].key}); }
   });
   // =================== END FILTER ===================
 
@@ -3364,6 +3451,20 @@
     }
   }
   chatNameSave.addEventListener('click', chatSaveUsername);
+  // "Make new host": pass UI privileges (stage / filter / ball / rules / win)
+  // to the opponent. The local privilege flag drops to false immediately, and
+  // the opponent flips theirs on receipt. UpdateLabels() re-evaluates every
+  // gated control's visibility.
+  var _makeHostBtn = document.getElementById('chat-makehost');
+  if(_makeHostBtn){
+    _makeHostBtn.addEventListener('click', function(){
+      if(!netMode || !hostPriv) return;
+      netSend({type:'host-transfer'});
+      hostPriv = false;
+      updateLabels();
+      updateMakeHostBtn();
+    });
+  }
   chatNameInput.addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ chatSaveUsername(); e.preventDefault(); }
   });
@@ -3461,9 +3562,11 @@
   // mutually exclusive — you're either a color or a boss).
   function selectColor(side, col){
     if(side === 'ball'){
+      if(netMode && !hostPriv) return; // online: only the host-priv holder sets the ball
       ballColor = col;
       ballSkin = ''; // a chosen colour and the volleyball skin are mutually exclusive
       updateSkinControls('ball');
+      if(netMode) netSend({type:'ballskin', color: ballColor, boss: ''});
       return;
     }
     slimeSkins[side].color = col;
@@ -3475,10 +3578,12 @@
   // Cycle the boss skin: Off -> each boss -> Off.
   function cycleBoss(side){
     if(side === 'ball'){ // the ball cycles its own special skins (volleyball sizes)
+      if(netMode && !hostPriv) return; // online: only the host-priv holder sets the ball
       var bn = BALL_BOSS.map(function(b){ return b.name; });
       var bi = bn.indexOf(ballSkin) + 1; // -1 (Off) -> 0
       ballSkin = (bi >= bn.length) ? '' : bn[bi];
       updateSkinControls('ball');
+      if(netMode) netSend({type:'ballskin', color: ballColor, boss: ballSkin});
       return;
     }
     var names = BOSS_SKINS.map(function(b){ return b.name; });
