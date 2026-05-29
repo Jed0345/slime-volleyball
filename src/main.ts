@@ -995,18 +995,17 @@
     // they drift, (c) how long they live, (d) their starting size, (e) their
     // curl phase — so no two have identical trajectories.
     var SPAWN = 7;
-    // When the slime is moving, give each new particle a backwards kick scaled
-    // to the slime's velocity. The slime then runs away from its own spawn,
-    // and the inherited drag makes particles physically trail behind it —
-    // not just sit where they were born.
-    var trailKick = -s.vx * 0.65;
+    // No trail-behind kick: every particle gets only a tiny random horizontal
+    // drift (no inherited backwards velocity from the slime). Combined with
+    // each particle following the slime's vx every update tick below, the
+    // cloud stays attached to the dome instead of streaking behind motion.
     for(var i = 0; i < SPAWN; i++){
       var ang = Math.PI * 1.10 + Math.random() * Math.PI * 0.80;  // upper ~70% of hemisphere
       var rOff = 0.85 + Math.random() * 0.18;
       s.vapor.push({
         x: cx + Math.cos(ang) * domeR * rOff,
         y: cy + Math.sin(ang) * domeR * rOff,
-        vx: (Math.random() - 0.5) * 0.25 + trailKick,
+        vx: (Math.random() - 0.5) * 0.25,
         vy: -0.20 - Math.random() * 0.22,                          // slower rise → shorter column
         age: 0,
         maxAge: 16 + ((Math.random() * 14) | 0),                   // 16..30 frames
@@ -1017,7 +1016,7 @@
     // Hard cap so an off-screen player doesn't accumulate too many.
     if(s.vapor.length > 220) s.vapor.splice(0, s.vapor.length - 220);
 
-    var h = lighten(s.col, 0.55).replace('#','');
+    var h = lighten(s.col, 0.70).replace('#','');
     var r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
     var rgb = r + ',' + g + ',' + b;
 
@@ -1033,7 +1032,9 @@
     for(var j = s.vapor.length - 1; j >= 0; j--){
       var p = s.vapor[j];
       // Physics: rise with deceleration, plus per-particle horizontal curl.
-      p.x += p.vx + Math.sin(p.age * 0.08 + p.curl) * 0.18;
+      // Adding s.vx makes every puff travel WITH the slime each frame, so the
+      // cloud rides along instead of being left behind as a trail.
+      p.x += p.vx + Math.sin(p.age * 0.08 + p.curl) * 0.18 + s.vx;
       p.y += p.vy;
       p.vy *= 0.99;
       p.vx *= 0.99;
@@ -1055,13 +1056,11 @@
 
     // Heavy blur on composite merges the field of independent puffs into a
     // single turbulent mass of vapour — the same offscreen-then-blur trick
-    // the spike-ghost uses for its smoothed silhouette. Blur radius scales
-    // with the slime's horizontal speed so the trail smears more the faster
-    // it's moving (still: 9px, full sprint: ~18px).
+    // the spike-ghost uses for its smoothed silhouette. Constant blur radius
+    // since the cloud no longer trails (no motion-smear needed).
     ctx.save();
     if(auraBlurOK){
-      var motionBlur = 9 + Math.min(Math.abs(s.vx) * 1.4, 9);
-      ctx.filter = 'blur(' + motionBlur.toFixed(1) + 'px)';
+      ctx.filter = 'blur(9px)';
     }
     ctx.drawImage(auraCv, 0, 0);
     ctx.restore();
@@ -1118,7 +1117,7 @@
     // for now — flip the false to re-enable. When the streak drops (or the
     // effect is disabled), we still clear timer + particle list so nothing
     // lingers in memory.
-    if(false && gameMode === 'power' && (s.streak|0) >= 3){
+    if(gameMode === 'power' && (s.streak|0) >= 3){
       drawStreakAura(s);
     } else if(s.auraT || s.vapor){
       s.auraT = 0;
