@@ -2539,14 +2539,24 @@
     if(!base || !knob) return;
     var activeTouchId = null;
     var usingMouse = false;
+    // Sensitivity > 1 means you hit max velocity before the knob reaches the
+    // physical edge of the ring. 1.6 → full speed at ~62% stick deflection;
+    // the outer ~38% is a sticky-max plateau so you can comfortably hold
+    // sprint without having to flatten the knob against the rim.
+    var JOY_SENSITIVITY = 1.6;
     function applyOffset(x){
       var r = base.offsetWidth / 2;
       var maxR = r - 14;                  // keep the knob fully inside the ring
       if(x > maxR) x = maxR;
       else if(x < -maxR) x = -maxR;
+      // Knob visual follows the finger's physical position — feels honest.
       knob.style.transform = 'translate(calc(-50% + ' + x + 'px), -50%)';
-      // No deadzone: axis is the raw normalized offset, clamped to [-1, +1].
-      joyAxis = (maxR > 0) ? (x / maxR) : 0;
+      // Velocity-axis is the boosted offset, clamped to [-1, +1]. No
+      // deadzone: any nudge produces proportional speed, just on a steeper
+      // curve so max comes sooner.
+      var raw = (maxR > 0) ? (x / maxR) : 0;
+      var boosted = raw * JOY_SENSITIVITY;
+      joyAxis = boosted < -1 ? -1 : (boosted > 1 ? 1 : boosted);
       joyActive = true;
     }
     function release(){
@@ -2606,24 +2616,38 @@
   })();
 
   // Controls-style toggle (touch only): cycle the Touch movement control.
+  // Both the menu-pane button (#touchctrlbtn) and the quick-access icon button
+  // on the menu-row (#touchctrl-quick) feed through this same state, so flipping
+  // either keeps the other in sync via the .joy-on body class + label refresh.
   function applyTouchControl(){
     document.body.classList.toggle('joy-on', touchControl === 'joystick');
     var btn = document.getElementById('touchctrlbtn');
     if(btn) btn.textContent = 'Controls: ' + (touchControl === 'joystick' ? 'Joystick' : 'Arrows');
+    var quick = document.getElementById('touchctrl-quick');
+    if(quick) quick.title = touchControl === 'joystick' ? 'Switch to Arrows' : 'Switch to Joystick';
     // Clear analog state when switching away from joystick so a leftover finger
     // position doesn't keep the slime drifting.
     if(touchControl !== 'joystick'){ joyAxis = 0; joyActive = false; }
   }
+  function toggleTouchControl(){
+    touchControl = (touchControl === 'joystick') ? 'arrows' : 'joystick';
+    try{ localStorage.setItem('slimeTouchControl', touchControl); }catch(e){}
+    applyTouchControl();
+  }
   (function setupTouchCtrlBtn(){
     var btn = document.getElementById('touchctrlbtn');
-    if(!btn) return;
-    // Only show the toggle on actual touch devices — pointless on desktop.
-    if(isTouch()) btn.style.display = '';
-    btn.addEventListener('click', function(){
-      touchControl = (touchControl === 'joystick') ? 'arrows' : 'joystick';
-      try{ localStorage.setItem('slimeTouchControl', touchControl); }catch(e){}
-      applyTouchControl();
-    });
+    if(btn){
+      if(isTouch()) btn.style.display = '';
+      btn.addEventListener('click', toggleTouchControl);
+    }
+    // Quick icon button on the menu-row beside the music button. Only visible
+    // on touch devices. The menu-row setup further down moves it next to
+    // #musicbtn programmatically.
+    var quick = document.getElementById('touchctrl-quick');
+    if(quick){
+      if(isTouch()) quick.style.display = '';
+      quick.addEventListener('click', toggleTouchControl);
+    }
     applyTouchControl();
   })();
 
@@ -3591,6 +3615,8 @@
       _stg.parentNode.insertBefore(_row, _stg.nextSibling);
       _row.appendChild(bar); bar.classList.add('below-game');
       var _mus = document.getElementById('musicbtn'); if(_mus) _row.appendChild(_mus);
+      // Quick joystick toggle sits right next to the music button on mobile.
+      var _quick = document.getElementById('touchctrl-quick'); if(_quick) _row.appendChild(_quick);
     }
     // Stage pane: clicking Stage/Filter dims the panel briefly so the new stage
     // shows through (resets on each click so you can cycle).
