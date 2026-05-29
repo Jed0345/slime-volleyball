@@ -965,6 +965,46 @@
     function c(n){ n = Math.max(0,Math.min(255,n)); var s=n.toString(16); return s.length<2?'0'+s:s; }
     return '#'+c(r)+c(g)+c(b);
   }
+  // Neonize: keep the input's hue, maximise saturation, push lightness to a
+  // vibrant mid-high band. Used for the streak aura so the colour reads as
+  // "that slime, but glowing" rather than washed out toward white.
+  function neonize(hex){
+    var h = hex.replace('#','');
+    if(h.length===3){ h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; }
+    var r = parseInt(h.substr(0,2),16) / 255;
+    var g = parseInt(h.substr(2,2),16) / 255;
+    var b = parseInt(h.substr(4,2),16) / 255;
+    // RGB → HSL
+    var max = Math.max(r,g,b), min = Math.min(r,g,b);
+    var hue = 0, l = (max + min) / 2;
+    var d = max - min;
+    if(d !== 0){
+      if(max === r) hue = ((g - b) / d) % 6;
+      else if(max === g) hue = (b - r) / d + 2;
+      else hue = (r - g) / d + 4;
+      hue *= 60;
+      if(hue < 0) hue += 360;
+    }
+    // Force neon: full saturation, lightness 0.60 — bright but not washed out.
+    var S = 1.0, L = 0.60;
+    // HSL → RGB
+    var C = (1 - Math.abs(2*L - 1)) * S;
+    var Hp = hue / 60;
+    var X = C * (1 - Math.abs((Hp % 2) - 1));
+    var r1, g1, b1;
+    if(Hp >= 0 && Hp < 1){ r1=C; g1=X; b1=0; }
+    else if(Hp < 2){ r1=X; g1=C; b1=0; }
+    else if(Hp < 3){ r1=0; g1=C; b1=X; }
+    else if(Hp < 4){ r1=0; g1=X; b1=C; }
+    else if(Hp < 5){ r1=X; g1=0; b1=C; }
+    else { r1=C; g1=0; b1=X; }
+    var m = L - C/2;
+    r = Math.round((r1 + m) * 255);
+    g = Math.round((g1 + m) * 255);
+    b = Math.round((b1 + m) * 255);
+    function c(n){ n = Math.max(0,Math.min(255,n)); var s=n.toString(16); return s.length<2?'0'+s:s; }
+    return '#'+c(r)+c(g)+c(b);
+  }
   // Power-Slime aura: when a slime is on a 3+ scoring streak, render a rising
   // plume of additive-blended particles around it. Each particle is a soft
   // radial-gradient blob in a lightened version of the slime's own colour, so
@@ -1016,7 +1056,7 @@
     // Hard cap so an off-screen player doesn't accumulate too many.
     if(s.vapor.length > 220) s.vapor.splice(0, s.vapor.length - 220);
 
-    var h = lighten(s.col, 0.70).replace('#','');
+    var h = neonize(s.col).replace('#','');
     var r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
     var rgb = r + ',' + g + ',' + b;
 
