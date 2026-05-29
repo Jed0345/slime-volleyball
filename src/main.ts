@@ -353,6 +353,10 @@
     }
     var sp = document.getElementById('joystick-spike');
     if(sp) sp.style.display = (gameMode === 'power') ? '' : 'none';
+    // body.power-mode drives CSS that lifts JUMP for the SPIKE diagonal. In
+    // classic mode SPIKE is hidden, so the lift would just orphan JUMP — drop
+    // it back down to the baseline (horizontally in line with the arrows).
+    document.body.classList.toggle('power-mode', gameMode === 'power');
     // Power Slime spike/counter hint, shown only when those moves are active.
     // The below-game line keeps the "Power Slime:" prefix for context; the menu
     // copy (already inside the Rules pane) drops it.
@@ -2539,11 +2543,6 @@
     if(!base || !knob) return;
     var activeTouchId = null;
     var usingMouse = false;
-    // Sensitivity > 1 means you hit max velocity before the knob reaches the
-    // physical edge of the ring. 1.6 → full speed at ~62% stick deflection;
-    // the outer ~38% is a sticky-max plateau so you can comfortably hold
-    // sprint without having to flatten the knob against the rim.
-    var JOY_SENSITIVITY = 1.6;
     function applyOffset(x){
       var r = base.offsetWidth / 2;
       var maxR = r - 14;                  // keep the knob fully inside the ring
@@ -2551,12 +2550,12 @@
       else if(x < -maxR) x = -maxR;
       // Knob visual follows the finger's physical position — feels honest.
       knob.style.transform = 'translate(calc(-50% + ' + x + 'px), -50%)';
-      // Velocity-axis is the boosted offset, clamped to [-1, +1]. No
-      // deadzone: any nudge produces proportional speed, just on a steeper
-      // curve so max comes sooner.
+      // Squared curve: joyAxis = sign(raw) * raw². Slow ramp at low stick
+      // (fine control / creeping speeds) and a steep ramp toward max. Max
+      // only at the physical edge of the ring. No deadzone — any nudge
+      // still produces some speed, just very little until you push further.
       var raw = (maxR > 0) ? (x / maxR) : 0;
-      var boosted = raw * JOY_SENSITIVITY;
-      joyAxis = boosted < -1 ? -1 : (boosted > 1 ? 1 : boosted);
+      joyAxis = (raw < 0 ? -1 : 1) * raw * raw;
       joyActive = true;
     }
     function release(){
